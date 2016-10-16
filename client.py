@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import asyncio
 import aiohttp
 from aiohttp_jrpc import Client,InvalidResponse
