@@ -41,13 +41,13 @@ class Server:
 
     # decorator
     def authenticated(func):
-        async def func_wrapper(request):
+        async def func_wrapper(self, request):
             session = await get_session(request)
             if session.new:
                 response = web.Response(status=302)
                 response.headers['Location'] = '/login?path='+request.path_qs
                 return response
-            return await func(request, session)
+            return await func(self, request, session)
         return func_wrapper
 
     async def _start(self):
