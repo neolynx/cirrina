@@ -1,11 +1,31 @@
 import asyncio
-from aiohttp_jrpc import Service, JError, jrpc_errorhandler_middleware
+from aiohttp_jrpc import Service, JError, JResponse
 from aiohttp import web, WSMsgType
 from cryptography import fernet
 from aiohttp_session import setup, get_session, session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import base64
 import json
+
+from aiohttp_jrpc import decode
+from functools import wraps
+from validictory import validate, ValidationError, SchemaError
+
+def rpc_valid(schema=None):
+    """ Validation data by specific validictory configuration """
+    def dec(fun):
+        @wraps(fun)
+        def d_func(self, ctx, data, *a, **kw):
+            try:
+                print("DATA", data)
+                validate(data['params'], schema)
+            except ValidationError as err:
+                raise InvalidParams(err)
+            except SchemaError as err:
+                raise InternalError(err)
+            return fun(self, ctx, data['params'], *a, **kw)
+        return d_func
+    return dec
 
 class Server():
 
@@ -112,6 +132,46 @@ class Server():
         for ws in self.websockets:
             ws.send_str(msg)
 
+    def _rpc_handler(self):
+        class MyRPC(object):
+            cirrina = self
+
+            def __new__(cls, ctx):
+                """ Return on call class """
+                return cls.__run(cls, ctx)
+
+            @asyncio.coroutine
+            def __run(self, ctx):
+                """ Run service """
+                print("__run")
+                try:
+                    data = yield from decode(ctx)
+                except ParseError:
+                    return JError().parse()
+                except InvalidRequest:
+                    return JError().request()
+                except InternalError:
+                    return JError().internal()
+
+                try:
+                    i_app = getattr(MyRPC.cirrina, data['method'])
+                    i_app = asyncio.coroutine(i_app)
+                except Exception:
+                    return JError(data).method()
+
+                try:
+                    resp = yield from i_app(ctx, data)
+                except InvalidParams:
+                    return JError(data).params()
+                except InternalError:
+                    return JError(data).internal()
+
+                return JResponse(jsonrpc={
+                    "id": data['id'], "result": resp
+                    })
+
+        return MyRPC
+
     def GET(self, location, handler):
         self.app.router.add_route('GET', location, handler)
 
@@ -121,8 +181,8 @@ class Server():
     def WS(self):
         self.app.router.add_route('GET', "/ws", self._ws_handler)
 
-    def RPC(self, location, handler):
-        self.app.router.add_route('POST', location, handler)
+    def RPC(self, location):
+        self.app.router.add_route('POST', location, self._rpc_handler())
 
     def STATIC(self, location, path):
         self.app.router.add_static(location, path)

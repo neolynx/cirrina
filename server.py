@@ -1,10 +1,9 @@
 #!/usr/bin/python3
 
 import cirrina
-from aiohttp import web, WSMsgType
+from aiohttp import web
 from aiohttp_session import get_session
 import json
-from aiohttp_jrpc import Service, JError, jrpc_errorhandler_middleware
 
 
 class MyServer(cirrina.Server):
@@ -12,7 +11,7 @@ class MyServer(cirrina.Server):
     def __init__(self, bind, port):
         cirrina.Server.__init__(self, bind, port)
         self.GET ("/",      self.default)
-        self.RPC ("/jrpc",  self.hmm())
+        self.RPC ("/jrpc")
         self.WS()
         self.STATIC("/static", "static/")
 
@@ -77,27 +76,24 @@ class MyServer(cirrina.Server):
 
     ### JSON RPC
 
-    def hmm(self):
-        class MyRPC(Service):
-            SCH = {
-                "type": "object",
-                "properties": {
-                    "data": {"type": "string"},
-                },
-            }
-            cirrina = self
 
-            @Service.valid(SCH)
-            def hello(self, request, data):
-                session = yield from get_session(request)
-                visit_count = session['visit_count'] if 'visit_count' in session else 1
-                print("got:", session.identity, visit_count)
-                session['visit_count'] = visit_count + 1
-                if data["data"] == "hello":
-                    MyRPC.cirrina.websocket_broadcast('bla')
-                    return {"status": "hi", 'visit_count': visit_count - 1}
-                return {"status": data}
-        return MyRPC
+    SCH = {
+        "type": "object",
+        "properties": {
+            "data": {"type": "string"},
+        },
+    }
+
+    @cirrina.rpc_valid(SCH)
+    def hello(self, request, data):
+        session = yield from get_session(request)
+        visit_count = session['visit_count'] if 'visit_count' in session else 1
+        print("got:", session.identity, visit_count)
+        session['visit_count'] = visit_count + 1
+        if data["data"] == "hello":
+            self.websocket_broadcast('bla')
+            return {"status": "hi", 'visit_count': visit_count - 1}
+        return {"status": data}
 
 
 if __name__ == "__main__":
