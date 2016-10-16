@@ -7,7 +7,7 @@ from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import base64
 import json
 
-class Server:
+class Server():
 
     login_html = '''<!DOCTYPE HTML>
 <html>
@@ -108,6 +108,10 @@ class Server:
 
         return ws
 
+    def websocket_broadcast(self, msg):
+        for ws in self.websockets:
+            ws.send_str(msg)
+
     def GET(self, location, handler):
         self.app.router.add_route('GET', location, handler)
 
@@ -130,10 +134,7 @@ class Server:
             self.loop.run_forever()
         except KeyboardInterrupt:
             pass
-        #self.srv.stop()
         self.loop.close()
-        #print("Stopping server")
-        #try:
-        #except Excetion as e:
-            #pass
         print("done")
+
+
