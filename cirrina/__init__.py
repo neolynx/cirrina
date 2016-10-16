@@ -189,7 +189,7 @@ class Server():
 
     def run(self):
         self.loop.run_until_complete(self._start())
-        print("Server started at http://127.0.0.1:8080")
+        print("Server started at http://%s:%d"%(self.bind, self.port))
         try:
             self.loop.run_forever()
         except KeyboardInterrupt:
