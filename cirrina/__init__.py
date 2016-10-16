@@ -38,7 +38,6 @@ class Server:
         self.login_html = Server.login_html
         self.authenticate = self.dummy_auth
         self.websockets = []
-        self.websocket_handler = None
 
     # decorator
     def authenticated(func):
@@ -95,17 +94,17 @@ class Server:
 
         self.websockets.append(ws)
 
-        self.websocket_handler.connected(ws, session)
+        self.websocket_connected(ws, session)
 
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
-                self.websocket_handler.message(ws, session, msg.data)
+                self.websocket_message(ws, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
                 print('websocket closed with exception %s' %
                   ws.exception())
 
         self.websockets.remove(ws)
-        self.websocket_handler.closed(session)
+        self.websocket_closed(session)
 
         return ws
 
@@ -115,10 +114,7 @@ class Server:
     def POST(self, location, handler):
         self.app.router.add_route('POST', location, handler)
 
-    def WS(self, handler):
-        if self.websocket_handler:
-            raise Exception("websocket: handler already defined")
-        self.websocket_handler = handler()
+    def WS(self):
         self.app.router.add_route('GET', "/ws", self._ws_handler)
 
     def RPC(self, location, handler):
