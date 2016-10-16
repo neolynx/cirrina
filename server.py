@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import cirrina
 from aiohttp import web
 import json
