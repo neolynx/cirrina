@@ -17,7 +17,6 @@ def rpc_valid(schema=None):
         @wraps(fun)
         def d_func(self, ctx, data, *a, **kw):
             try:
-                print("DATA", data)
                 validate(data['params'], schema)
             except ValidationError as err:
                 raise InvalidParams(err)
@@ -143,7 +142,6 @@ class Server():
             @asyncio.coroutine
             def __run(self, ctx):
                 """ Run service """
-                print("__run")
                 try:
                     data = yield from decode(ctx)
                 except ParseError:

@@ -76,7 +76,6 @@ class MyServer(cirrina.Server):
 
     ### JSON RPC
 
-
     SCH = {
         "type": "object",
         "properties": {
@@ -86,9 +85,9 @@ class MyServer(cirrina.Server):
 
     @cirrina.rpc_valid(SCH)
     def hello(self, request, data):
+        print("jrpc hello called")
         session = yield from get_session(request)
         visit_count = session['visit_count'] if 'visit_count' in session else 1
-        print("got:", session.identity, visit_count)
         session['visit_count'] = visit_count + 1
         if data["data"] == "hello":
             self.websocket_broadcast('bla')
