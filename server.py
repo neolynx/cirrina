@@ -92,7 +92,7 @@ class MyServer(cirrina.Server):
         self.STATIC("/static", "static/")
 
     def websocket_connected(self, ws, session):
-        print("websocket: not logged in")
+        print("websocket: new authenticated connection, user:", session['username'])
 
     def websocket_message(self, ws, session, msg):
         print("websocket: got message: ", msg)
