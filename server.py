@@ -3,38 +3,8 @@
 import cirrina
 from aiohttp import web, WSMsgType
 from aiohttp_session import get_session
-from aiohttp_jrpc import Service, JError, jrpc_errorhandler_middleware
 import json
-
-
-### JSON RPC
-
-SCH = {
-    "type": "object",
-    "properties": {
-        "data": {"type": "string"},
-    },
-}
-
-class rpc_handler(Service):
-    @Service.valid(SCH)
-    def hello(self, request, data):
-        session = yield from get_session(request)
-        visit_count = session['visit_count'] if 'visit_count' in session else 1
-        print("got:", session.identity, visit_count)
-        session['visit_count'] = visit_count + 1
-        if data["data"] == "hello":
-            for ws in websockets:
-                ws.send_str('bla')
-            return {"status": "hi", 'visit_count': visit_count - 1}
-        return {"status": data}
-
-    def error(self, request, data):
-        raise Exception("Error which will catch middleware")
-
-    def no_valid(self, request, data):
-        """ Method without validation incommig data """
-        return {"status": "ok"}
+from aiohttp_jrpc import Service, JError, jrpc_errorhandler_middleware
 
 
 class MyServer(cirrina.Server):
@@ -42,7 +12,7 @@ class MyServer(cirrina.Server):
     def __init__(self, bind, port):
         cirrina.Server.__init__(self, bind, port)
         self.GET ("/",      self.default)
-        self.RPC ("/jrpc",  rpc_handler)
+        self.RPC ("/jrpc",  self.hmm())
         self.WS()
         self.STATIC("/static", "static/")
 
@@ -103,6 +73,32 @@ class MyServer(cirrina.Server):
 
     def websocket_closed(self, session):
         print('websocket connection closed')
+
+
+    ### JSON RPC
+
+    def hmm(self):
+        class MyRPC(Service):
+            SCH = {
+                "type": "object",
+                "properties": {
+                    "data": {"type": "string"},
+                },
+            }
+            cirrina = self
+
+            @Service.valid(SCH)
+            def hello(self, request, data):
+                session = yield from get_session(request)
+                visit_count = session['visit_count'] if 'visit_count' in session else 1
+                print("got:", session.identity, visit_count)
+                session['visit_count'] = visit_count + 1
+                if data["data"] == "hello":
+                    MyRPC.cirrina.websocket_broadcast('bla')
+                    return {"status": "hi", 'visit_count': visit_count - 1}
+                return {"status": data}
+        return MyRPC
+
 
 if __name__ == "__main__":
     c = MyServer("127.0.0.1", 8080)
