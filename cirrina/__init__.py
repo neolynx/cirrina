@@ -15,14 +15,14 @@ def rpc_valid(schema=None):
     """ Validation data by specific validictory configuration """
     def dec(fun):
         @wraps(fun)
-        def d_func(self, ctx, data, *a, **kw):
+        def d_func(self, ctx, session, data, *a, **kw):
             try:
                 validate(data['params'], schema)
             except ValidationError as err:
                 raise InvalidParams(err)
             except SchemaError as err:
                 raise InternalError(err)
-            return fun(self, ctx, data['params'], *a, **kw)
+            return fun(self, ctx, session, data['params'], *a, **kw)
         return d_func
     return dec
 
@@ -116,6 +116,7 @@ class Server():
         self.websocket_connected(ws, session)
 
         async for msg in ws:
+            print("websocket got:", msg)
             if msg.type == WSMsgType.TEXT:
                 self.websocket_message(ws, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
@@ -157,8 +158,9 @@ class Server():
                 except Exception:
                     return JError(data).method()
 
+                session = yield from get_session(ctx)
                 try:
-                    resp = yield from i_app(ctx, data)
+                    resp = yield from i_app(ctx, session, data)
                 except InvalidParams:
                     return JError(data).params()
                 except InternalError:

@@ -2,7 +2,6 @@
 
 import cirrina
 from aiohttp import web
-from aiohttp_session import get_session
 import json
 
 
@@ -14,6 +13,7 @@ class MyServer(cirrina.Server):
         self.RPC ("/jrpc")
         self.WS()
         self.STATIC("/static", "static/")
+
 
     ### HTTP
 
@@ -84,19 +84,16 @@ class MyServer(cirrina.Server):
     }
 
     @cirrina.rpc_valid(SCH)
-    def hello(self, request, data):
-        print("jrpc hello called")
-        session = yield from get_session(request)
+    def hello(self, request, session, data):
+        print("jrpc hello called:", data["data"])
         visit_count = session['visit_count'] if 'visit_count' in session else 1
         session['visit_count'] = visit_count + 1
-        if data["data"] == "hello":
-            self.websocket_broadcast('bla')
-            return {"status": "hi", 'visit_count': visit_count - 1}
-        return {"status": data}
+        self.websocket_broadcast(data["data"])
+        return {"status": data["data"], 'visit_count': visit_count - 1}
 
 
 if __name__ == "__main__":
-    c = MyServer("127.0.0.1", 8080)
+    c = MyServer("0.0.0.0", 8080)
     c.run()
 
 
