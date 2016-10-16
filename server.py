@@ -52,7 +52,8 @@ class MyServer(cirrina.Server):
    </script>
    </head>
    <body>
-     <input type='button' value='Send' onclick="cirrina.send('glu');">
+     <input type="text" id="text">
+     <input type='button' value='Send' onclick="cirrina.send(document.getElementById('text').value);">
      visit count: %d <br/>
    </body>
 </html>
@@ -68,7 +69,7 @@ class MyServer(cirrina.Server):
 
     def websocket_message(self, ws, session, msg):
         print("websocket: got message: ", msg)
-        ws.send_str(msg + '/answer%d'%session['visit_count'] )
+        self.websocket_broadcast(msg)
 
     def websocket_closed(self, session):
         print('websocket connection closed')
