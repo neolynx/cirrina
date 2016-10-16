@@ -36,17 +36,17 @@ function Cirrina () {
         {
             try {
                 var msg = JSON.parse(evt.data);
+                if(msg.status = 401)
+                {
+                    location.reload();
+                    return;
+                }
             } catch (e) {
                 console.log("websocket non json message: " + evt.data);
-                return;
-            }
-            if(msg.status = 401)
-            {
-                location.reload();
-                return;
+                msg = evt.data;
             }
 
-            cirrina.onmessage(this, msg)
+            cirrina.onmessage(this, msg);
         };
 
         this.ws.onclose = function()
