@@ -82,25 +82,27 @@ class rpc_handler(Service):
         return {"status": "ok"}
 
 
-### WebSockets
-class websocket_handler(object):
+class MyServer(cirrina.Server):
 
-    def connected(self, ws, session):
+    def __init__(self, bind, port):
+        cirrina.Server.__init__(self, bind, port)
+        self.GET ("/",      default)
+        self.RPC ("/jrpc",  rpc_handler)
+        self.WS()
+        self.STATIC("/static", "static/")
+
+    def websocket_connected(self, ws, session):
         print("websocket: not logged in")
 
-    def message(self, ws, session, msg):
+    def websocket_message(self, ws, session, msg):
         print("websocket: got message: ", msg)
         ws.send_str(msg + '/answer%d'%session['visit_count'] )
 
-    def closed(self, session):
+    def websocket_closed(self, session):
         print('websocket connection closed')
 
 if __name__ == "__main__":
-    c = cirrina.Server("127.0.0.1", 8080)
-    c.GET ("/",      default)
-    c.RPC ("/jrpc",  rpc_handler)
-    c.WS  (websocket_handler)
-    c.STATIC("/static", "static/")
+    c = MyServer("127.0.0.1", 8080)
     c.run()
 
 
