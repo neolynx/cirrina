@@ -71,8 +71,8 @@ class Server:
         fernet_key = fernet.Fernet.generate_key()
         secret_key = base64.urlsafe_b64decode(fernet_key)
         setup(self.app, EncryptedCookieStorage(secret_key))
-        self.GET ("/login", self._login)
-        self.POST("/login", self._auth)
+        self.get("/login", self._login)
+        self.post("/login", self._auth)
         self.login_html = Server.login_html
         self.authenticate = self.dummy_auth
         self.websockets = []
@@ -201,19 +201,19 @@ class Server:
 
         return MyRPC
 
-    def GET(self, location, handler):
+    def get(self, location, handler):
         self.app.router.add_route('GET', location, handler)
 
-    def POST(self, location, handler):
+    def post(self, location, handler):
         self.app.router.add_route('POST', location, handler)
 
-    def WS(self):
+    def ws(self):
         self.app.router.add_route('GET', "/ws", self._ws_handler)
 
-    def RPC(self, location):
+    def rpc(self, location):
         self.app.router.add_route('POST', location, self._rpc_handler())
 
-    def STATIC(self, location, path):
+    def static(self, location, path):
         self.app.router.add_static(location, path)
 
     def run(self):
