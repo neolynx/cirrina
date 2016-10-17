@@ -7,10 +7,10 @@ class MyServer(cirrina.Server):
 
     def __init__(self, bind, port):
         cirrina.Server.__init__(self, bind, port)
-        self.GET ("/",      self.default)
-        self.RPC ("/jrpc")
-        self.WS()
-        self.STATIC("/static", cirrina.Server.DEFAULT_STATIC_PATH)
+        self.get("/",      self.default)
+        self.rpc("/jrpc")
+        self.ws()
+        self.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
 
 
     ### HTTP
