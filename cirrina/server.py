@@ -1,32 +1,47 @@
+"""
+`cirrina` - Opinionated web framework
+
+Implementation of server code.
+
+:license: LGPL, see LICENSE for details
+"""
+
 import asyncio
-from aiohttp_jrpc import Service, JError, JResponse
-from aiohttp import web, WSMsgType
-from cryptography import fernet
-from aiohttp_session import setup, get_session, session_middleware
-from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import base64
+from functools import wraps
 import json
 
-from aiohttp_jrpc import decode
-from functools import wraps
+from cryptography import fernet
+from aiohttp import web, WSMsgType
+from aiohttp_session import setup, get_session, session_middleware
+from aiohttp_session.cookie_storage import EncryptedCookieStorage
+from aiohttp_jrpc import Service, JError, JResponse, decode
 from validictory import validate, ValidationError, SchemaError
 
 def rpc_valid(schema=None):
-    """ Validation data by specific validictory configuration """
-    def dec(fun):
-        @wraps(fun)
+    """
+    Validation data by specific validictory configuration.
+    """
+    def decorator(func):  # pylint: disable=missing-docstring
+        @wraps(func)
         def d_func(self, ctx, session, data, *a, **kw):
+            """
+            Decorator for schema validation.
+            """
             try:
                 validate(data['params'], schema)
             except ValidationError as err:
                 raise InvalidParams(err)
             except SchemaError as err:
                 raise InternalError(err)
-            return fun(self, ctx, session, data['params'], *a, **kw)
+            return func(self, ctx, session, data['params'], *a, **kw)
         return d_func
-    return dec
+    return decorator
 
-class Server():
+class Server:
+    """
+    cirrina Server implementation.
+    """
 
     login_html = '''<!DOCTYPE HTML>
 <html>
@@ -36,18 +51,19 @@ class Server():
         <input type="text" name="username"><br/>
       User password:<br/>
         <input type="password" name="password"><br/>
-        <input type="hidden" name="path" value="%s">
+        <input type="hidden" name="path" value="{0}">
         <input type="submit" value="Login"><br/>
     </form>
   </body>
 </html>
 '''
 
-    def __init__(self, bind, port):
-        self.bind = bind
+    def __init__(self, address, port):
+        self.address = address
         self.port = port
         self.loop = asyncio.get_event_loop()
         self.app = web.Application(loop=self.loop) #, middlewares=[session_middleware])
+        self.srv = None
 
         fernet_key = fernet.Fernet.generate_key()
         secret_key = base64.urlsafe_b64decode(fernet_key)
@@ -58,22 +74,30 @@ class Server():
         self.authenticate = self.dummy_auth
         self.websockets = []
 
-    # decorator
+    @staticmethod
     def authenticated(func):
-        async def func_wrapper(self, request):
+        """
+        Decorator to enforce valid session before
+        executing the decorated function.
+        """
+        async def _wrapper(self, request):  # pylint: disable=missing-docstring
             session = await get_session(request)
             if session.new:
                 response = web.Response(status=302)
                 response.headers['Location'] = '/login?path='+request.path_qs
                 return response
             return await func(self, request, session)
-        return func_wrapper
+        return _wrapper
 
     async def _start(self):
-        self.srv = await self.loop.create_server(self.app.make_handler(), self.bind, self.port)
+        """
+        Start cirrina server.
+        """
+        self.srv = await self.loop.create_server(self.app.make_handler(), self.address, self.port)
 
     async def _login(self, request):
-        resp = web.Response(text=(self.login_html%(request.GET.get('path', "/"))), content_type="text/html")
+        resp = web.Response(text=self.login_html.format(request.GET.get('path', "/")),
+                            content_type="text/html")
         return resp
 
     async def dummy_auth(self, username, password):
@@ -101,36 +125,38 @@ class Server():
         return response
 
     async def _ws_handler(self, request):
-        ws = web.WebSocketResponse()
-        await ws.prepare(request)
+        websocket = web.WebSocketResponse()
+        await websocket.prepare(request)
 
         session = await get_session(request)
         if session.new:
             print("websocket: not logged in")
-            ws.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
-            ws.close()
-            return ws
+            websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
+            websocket.close()
+            return websocket
 
-        self.websockets.append(ws)
+        self.websockets.append(websocket)
+        self.websocket_connected(websocket, session)
 
-        self.websocket_connected(ws, session)
-
-        async for msg in ws:
+        async for msg in websocket:
             print("websocket got:", msg)
             if msg.type == WSMsgType.TEXT:
-                self.websocket_message(ws, session, msg.data)
+                self.websocket_message(websocket, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
                 print('websocket closed with exception %s' %
-                  ws.exception())
+                  websocket.exception())
 
-        self.websockets.remove(ws)
+        self.websockets.remove(websocket)
         self.websocket_closed(session)
 
-        return ws
+        return websocket
 
     def websocket_broadcast(self, msg):
-        for ws in self.websockets:
-            ws.send_str(msg)
+        """
+        Broadcast the given message to all websocket connections.
+        """
+        for websocket in self.websockets:
+            websocket.send_str(msg)
 
     def _rpc_handler(self):
         class MyRPC(object):
@@ -188,8 +214,11 @@ class Server():
         self.app.router.add_static(location, path)
 
     def run(self):
+        """
+        Run cirrina server event loop.
+        """
         self.loop.run_until_complete(self._start())
-        print("Server started at http://%s:%d"%(self.bind, self.port))
+        print("Server started at http://%s:%d"%(self.address, self.port))
         try:
             self.loop.run_forever()
         except KeyboardInterrupt:
