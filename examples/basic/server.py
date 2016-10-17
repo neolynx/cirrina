@@ -1,19 +1,43 @@
-#!/usr/bin/python3
-
 import cirrina
 from aiohttp import web
 import json
+import logging
+
+#: Holds the logger for the current example
+logger = logging.getLogger(__name__)
 
 
 class MyServer(cirrina.Server):
 
+    login_html = '''<!DOCTYPE HTML>
+<html>
+  <body>
+    <form method="post" action="/login">
+      User name:<br/>
+        <input type="text" name="username"><br/>
+      User password:<br/>
+        <input type="password" name="password"><br/>
+        <input type="hidden" name="path" value="{0}">
+        <input type="submit" value="Login"><br/>
+    </form>
+  </body>
+</html>
+'''
+
     def __init__(self, bind, port):
         cirrina.Server.__init__(self, bind, port)
-        self.GET ("/",      self.default)
-        self.RPC ("/jrpc")
-        self.WS()
-        self.STATIC("/static", "static/")
+        self.get('/login', self._login)
+        self.get("/", self.default)
+        self.rpc("/jrpc")
+        self.ws()
+        self.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
 
+
+    async def _login(self, request):
+        """
+        Send login page to client.
+        """
+        return web.Response(text=self.login_html.format(request.GET.get('path', "/")), content_type="text/html")
 
     ### HTTP
 
@@ -65,15 +89,14 @@ class MyServer(cirrina.Server):
     ### WebSockets
 
     def websocket_connected(self, ws, session):
-        print("websocket: new authenticated connection, user:", session['username'])
+        logger.info("websocket: new authenticated connection, user: %s", session['username'])
 
     def websocket_message(self, ws, session, msg):
-        print("websocket: got message: ", msg)
+        logger.info("websocket: got message: %s", msg)
         self.websocket_broadcast(msg)
 
     def websocket_closed(self, session):
-        print('websocket connection closed')
-
+        logger.info('websocket connection closed')
 
     ### JSON RPC
 
@@ -86,7 +109,7 @@ class MyServer(cirrina.Server):
 
     @cirrina.rpc_valid(SCH)
     def hello(self, request, session, data):
-        print("jrpc hello called:", data["data"])
+        logger.info("jrpc hello called: %s", data["data"])
         visit_count = session['visit_count'] if 'visit_count' in session else 1
         session['visit_count'] = visit_count + 1
         self.websocket_broadcast(data["data"])
@@ -94,7 +117,6 @@ class MyServer(cirrina.Server):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     c = MyServer("0.0.0.0", 8080)
     c.run()
-
-
