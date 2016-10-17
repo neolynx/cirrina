@@ -6,3 +6,8 @@ __pycache__/
 
 # python virtualenv
 env/
+
+# python setuptools
+*.egg-info/
+build/
+dist/
