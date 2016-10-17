@@ -10,6 +10,7 @@ import asyncio
 import base64
 from functools import wraps
 import json
+import os
 
 from cryptography import fernet
 from aiohttp import web, WSMsgType
@@ -42,6 +43,8 @@ class Server:
     """
     cirrina Server implementation.
     """
+
+    DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
 
     login_html = '''<!DOCTYPE HTML>
 <html>

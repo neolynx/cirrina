@@ -10,7 +10,7 @@ class MyServer(cirrina.Server):
         self.GET ("/",      self.default)
         self.RPC ("/jrpc")
         self.WS()
-        self.STATIC("/static", "static/")
+        self.STATIC("/static", cirrina.Server.DEFAULT_STATIC_PATH)
 
 
     ### HTTP
