@@ -1,15 +1,19 @@
-import cirrina
-from aiohttp import web
-import json
+"""
+`cirrina` - Opinionated web framework
+
+Simple cirrina server example.
+
+:license: LGPL, see LICENSE for details
+"""
+
 import logging
 
-#: Holds the logger for the current example
-logger = logging.getLogger(__name__)
+from aiohttp import web
 
+import cirrina
 
-class MyServer(cirrina.Server):
-
-    login_html = '''<!DOCTYPE HTML>
+#: Holds the login html template
+LOGIN_HTML = '''<!DOCTYPE HTML>
 <html>
   <body>
     <form method="post" action="/login">
@@ -24,99 +28,106 @@ class MyServer(cirrina.Server):
 </html>
 '''
 
-    def __init__(self, bind, port):
-        cirrina.Server.__init__(self, bind, port)
-        self.get('/login', self._login)
-        self.get("/", self.default)
-        self.rpc("/jrpc")
-        self.ws()
-        self.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
+
+#: Holds the JSON RPC schema
+SCH = {
+    "type": "object",
+    "properties": {
+        "data": {"type": "string"},
+    },
+}
 
 
-    async def _login(self, request):
-        """
-        Send login page to client.
-        """
-        return web.Response(text=self.login_html.format(request.GET.get('path', "/")), content_type="text/html")
+#: Holds the logger for the current example
+logger = logging.getLogger(__name__)
 
-    ### HTTP
+#: Create cirrina app.
+app = cirrina.Server()
+app.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
+app.enable_websockets()
+app.rpc('/jrpc')
 
-    @cirrina.Server.authenticated
-    async def default(self, request, session):
-        visit_count = session['visit_count'] if 'visit_count' in session else 1
-        session['visit_count'] = visit_count + 1
 
-        html = '''<!DOCTYPE HTML>
+@app.websocket_connect
+async def websocket_connected(ws, session):
+    logger.info("websocket: new authenticated connection, user: %s", session['username'])
+
+
+@app.websocket_message
+async def websocket_message(ws, session, msg):
+    logger.info("websocket: got message: %s", msg)
+    app.websocket_broadcast(msg)
+
+
+@app.websocket_disconnect
+async def websocket_closed(session):
+    logger.info('websocket connection closed')
+
+
+@app.get('/login')
+async def _login(request):
+    """
+    Send login page to client.
+    """
+    return web.Response(text=LOGIN_HTML.format(request.GET.get('path', "/")), content_type="text/html")
+
+
+@app.get('/')
+@app.authenticated
+async def default(request, session):
+    visit_count = session['visit_count'] if 'visit_count' in session else 1
+    session['visit_count'] = visit_count + 1
+
+    html = '''<!DOCTYPE HTML>
 <html>
-  <head>
-    <script type="text/javascript" src="static/cirrina.js"></script>
-    <script type="text/javascript">
-      function log( msg )
-      {
-        document.body.innerHTML += msg + "<br/>";
-        /*alert( msg );*/
-      }
-      var cirrina = new Cirrina();
+<head>
+<script type="text/javascript" src="static/cirrina.js"></script>
+<script type="text/javascript">
+  function log( msg )
+  {
+    document.body.innerHTML += msg + "<br/>";
+    /*alert( msg );*/
+  }
+  var cirrina = new Cirrina();
 
-      cirrina.onopen = function(ws)
-      {
-        log("connected" );
-        msg = "Hello"
-        log("send: " + msg );
-        ws.send( msg );
-      };
-      cirrina.onmessage = function (ws, msg)
-      {
-        log("got: " + msg );
-      };
-      cirrina.onclose = function()
-      {
-        log("disconnected");
-      };
-   </script>
-   </head>
-   <body>
-     <input type="text" id="text">
-     <input type='button' value='Send' onclick="cirrina.send(document.getElementById('text').value);">
-     visit count: %d <br/>
-   </body>
+  cirrina.onopen = function(ws)
+  {
+    log("connected" );
+    msg = "Hello"
+    log("send: " + msg );
+    ws.send( msg );
+  };
+  cirrina.onmessage = function (ws, msg)
+  {
+    log("got: " + msg );
+  };
+  cirrina.onclose = function()
+  {
+    log("disconnected");
+  };
+</script>
+</head>
+<body>
+ <input type="text" id="text">
+ <input type='button' value='Send' onclick="cirrina.send(document.getElementById('text').value);">
+ visit count: %d <br/>
+</body>
 </html>
 '''%visit_count
-        resp = web.Response(text=html, content_type="text/html")
-        return resp
+    resp = web.Response(text=html, content_type="text/html")
+    return resp
 
 
-    ### WebSockets
-
-    def websocket_connected(self, ws, session):
-        logger.info("websocket: new authenticated connection, user: %s", session['username'])
-
-    def websocket_message(self, ws, session, msg):
-        logger.info("websocket: got message: %s", msg)
-        self.websocket_broadcast(msg)
-
-    def websocket_closed(self, session):
-        logger.info('websocket connection closed')
-
-    ### JSON RPC
-
-    SCH = {
-        "type": "object",
-        "properties": {
-            "data": {"type": "string"},
-        },
-    }
-
-    @cirrina.rpc_valid(SCH)
-    def hello(self, request, session, data):
-        logger.info("jrpc hello called: %s", data["data"])
-        visit_count = session['visit_count'] if 'visit_count' in session else 1
-        session['visit_count'] = visit_count + 1
-        self.websocket_broadcast(data["data"])
-        return {"status": data["data"], 'visit_count': visit_count - 1}
+@cirrina.rpc_valid(SCH)
+@app.register_rpc
+async def hello(request, session, data):
+    logger.info("jrpc hello called: %s", data["data"])
+    visit_count = session['visit_count'] if 'visit_count' in session else 1
+    session['visit_count'] = visit_count + 1
+    app.websocket_broadcast(data["data"])
+    return {"status": data["data"], 'visit_count': visit_count - 1}
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    c = MyServer("0.0.0.0", 8080)
-    c.run()
+    app.run('0.0.0.0', 8080, debug=True)
