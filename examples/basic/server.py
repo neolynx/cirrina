@@ -5,13 +5,35 @@ import json
 
 class MyServer(cirrina.Server):
 
+    login_html = '''<!DOCTYPE HTML>
+<html>
+  <body>
+    <form method="post" action="/login">
+      User name:<br/>
+        <input type="text" name="username"><br/>
+      User password:<br/>
+        <input type="password" name="password"><br/>
+        <input type="hidden" name="path" value="{0}">
+        <input type="submit" value="Login"><br/>
+    </form>
+  </body>
+</html>
+'''
+
     def __init__(self, bind, port):
         cirrina.Server.__init__(self, bind, port)
-        self.get("/",      self.default)
+        self.get('/login', self._login)
+        self.get("/", self.default)
         self.rpc("/jrpc")
         self.ws()
         self.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
 
+
+    async def _login(self, request):
+        """
+        Send login page to client.
+        """
+        return web.Response(text=self.login_html.format(request.GET.get('path', "/")), content_type="text/html")
 
     ### HTTP
 

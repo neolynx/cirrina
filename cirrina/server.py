@@ -19,6 +19,7 @@ from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_jrpc import Service, JError, JResponse, decode
 from validictory import validate, ValidationError, SchemaError
 
+
 def rpc_valid(schema=None):
     """
     Validation data by specific validictory configuration.
@@ -39,6 +40,7 @@ def rpc_valid(schema=None):
         return d_func
     return decorator
 
+
 class Server:
     """
     cirrina Server implementation.
@@ -46,36 +48,48 @@ class Server:
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
 
-    login_html = '''<!DOCTYPE HTML>
-<html>
-  <body>
-    <form method="post" action="/login">
-      User name:<br/>
-        <input type="text" name="username"><br/>
-      User password:<br/>
-        <input type="password" name="password"><br/>
-        <input type="hidden" name="path" value="{0}">
-        <input type="submit" value="Login"><br/>
-    </form>
-  </body>
-</html>
-'''
-
-    def __init__(self, address, port):
+    def __init__(self, address, port, loop=None):
+        #: Holds the address where the cirrina server is listening.
         self.address = address
+
+        #: Holds the port where the cirrina server is listening.
         self.port = port
-        self.loop = asyncio.get_event_loop()
+
+        if loop is None:
+            loop = asyncio.get_event_loop()
+        #: Holds the asyncio event loop which is used to handle requests.
+        self.loop = loop
+
+        #: Holds the aiohttp web application instance.
         self.app = web.Application(loop=self.loop) #, middlewares=[session_middleware])
+
+        #: Holds the asyncio server instance.
         self.srv = None
 
+        #: Holds all websocket connections.
+        self.websockets = []
+
+        # setup cookie encryption for user sessions.
         fernet_key = fernet.Fernet.generate_key()
         secret_key = base64.urlsafe_b64decode(fernet_key)
         setup(self.app, EncryptedCookieStorage(secret_key))
-        self.get("/login", self._login)
-        self.post("/login", self._auth)
-        self.login_html = Server.login_html
+
+        #: Holds the method for user authentication.
+        #  This can be any method accepting username and password
+        #  and returning a bool.
         self.authenticate = self.dummy_auth
-        self.websockets = []
+
+        # add default routes to request handler.
+        self.post('/login', self._auth)
+
+    async def _start(self):
+        """
+        Start cirrina server.
+
+        This method starts the asyncio loop server which uses
+        the aiohttp web application.:
+        """
+        self.srv = await self.loop.create_server(self.app.make_handler(), self.address, self.port)
 
     @staticmethod
     def authenticated(func):
@@ -92,42 +106,54 @@ class Server:
             return await func(self, request, session)
         return _wrapper
 
-    async def _start(self):
-        """
-        Start cirrina server.
-        """
-        self.srv = await self.loop.create_server(self.app.make_handler(), self.address, self.port)
-
-    async def _login(self, request):
-        resp = web.Response(text=self.login_html.format(request.GET.get('path', "/")),
-                            content_type="text/html")
-        return resp
-
     async def dummy_auth(self, username, password):
+        """
+        Dummy authentication implementation for testing purposes.
+
+        This method should be removed.
+        """
         if username == 'test' and password == 'test':
             return True
         return False
 
     async def _auth(self, request):
+        """
+        Authenticate the user with the given request data.
+
+        Username and Password a received with the HTTP POST data
+        and the ``username`` and ``password`` fields.
+        On success a new session will be created.
+        """
         session = await get_session(request)
+
+        # get username and password from POST request
         await request.post()
         username = request.POST.get('username')
         password = request.POST.get('password')
-        if username and password:
-            if await self.authenticate(username, password):
-                print("User authenticated:", username)
-                session['username'] = username
-                response = web.Response(status=302)
-                response.headers['Location'] = request.POST.get('path', "/")
-                return response
 
-        print("User authentication failed:", 'username')
+        # check if username and password are valid
+        if not await self.authenticate(username, password):
+            print('User authentication failed:', 'username')
+            response = web.Response(status=302)
+            response.headers['Location'] = '/login'
+            session.invalidate()
+            return response
+
+        print('User authenticated:', username)
+        session['username'] = username
         response = web.Response(status=302)
-        response.headers['Location'] = '/login'
-        session.invalidate()
+        response.headers['Location'] = request.POST.get('path', '/')
         return response
 
     async def _ws_handler(self, request):
+        """
+        Handle websocket connections.
+
+        This includes:
+            * new connections
+            * closed connections
+            * messages
+        """
         websocket = web.WebSocketResponse()
         await websocket.prepare(request)
 
@@ -202,18 +228,33 @@ class Server:
         return MyRPC
 
     def get(self, location, handler):
+        """
+        Register new HTTP GET route.
+        """
         self.app.router.add_route('GET', location, handler)
 
     def post(self, location, handler):
+        """
+        Register new HTTP POST route.
+        """
         self.app.router.add_route('POST', location, handler)
 
     def ws(self):
+        """
+        Enable websocket communication.
+        """
         self.app.router.add_route('GET', "/ws", self._ws_handler)
 
     def rpc(self, location):
+        """
+        Register new JSON RPC method.
+        """
         self.app.router.add_route('POST', location, self._rpc_handler())
 
     def static(self, location, path):
+        """
+        Register new route to static path.
+        """
         self.app.router.add_static(location, path)
 
     def run(self):
