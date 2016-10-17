@@ -1,6 +1,10 @@
 import cirrina
 from aiohttp import web
 import json
+import logging
+
+#: Holds the logger for the current example
+logger = logging.getLogger(__name__)
 
 
 class MyServer(cirrina.Server):
@@ -85,15 +89,14 @@ class MyServer(cirrina.Server):
     ### WebSockets
 
     def websocket_connected(self, ws, session):
-        print("websocket: new authenticated connection, user:", session['username'])
+        logger.info("websocket: new authenticated connection, user: %s", session['username'])
 
     def websocket_message(self, ws, session, msg):
-        print("websocket: got message: ", msg)
+        logger.info("websocket: got message: %s", msg)
         self.websocket_broadcast(msg)
 
     def websocket_closed(self, session):
-        print('websocket connection closed')
-
+        logger.info('websocket connection closed')
 
     ### JSON RPC
 
@@ -106,7 +109,7 @@ class MyServer(cirrina.Server):
 
     @cirrina.rpc_valid(SCH)
     def hello(self, request, session, data):
-        print("jrpc hello called:", data["data"])
+        logger.info("jrpc hello called: %s", data["data"])
         visit_count = session['visit_count'] if 'visit_count' in session else 1
         session['visit_count'] = visit_count + 1
         self.websocket_broadcast(data["data"])
@@ -114,7 +117,6 @@ class MyServer(cirrina.Server):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     c = MyServer("0.0.0.0", 8080)
     c.run()
-
-

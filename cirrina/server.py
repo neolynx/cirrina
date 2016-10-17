@@ -10,6 +10,7 @@ import asyncio
 import base64
 from functools import wraps
 import json
+import logging
 import os
 
 from cryptography import fernet
@@ -18,6 +19,10 @@ from aiohttp_session import setup, get_session, session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_jrpc import Service, JError, JResponse, decode
 from validictory import validate, ValidationError, SchemaError
+
+
+#: Holds the cirrina logger instance
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def rpc_valid(schema=None):
@@ -133,13 +138,13 @@ class Server:
 
         # check if username and password are valid
         if not await self.authenticate(username, password):
-            print('User authentication failed:', 'username')
+            logger.debug('User authentication failed: %s', username)
             response = web.Response(status=302)
             response.headers['Location'] = '/login'
             session.invalidate()
             return response
 
-        print('User authenticated:', username)
+        logger.debug('User authenticated: %s', username)
         session['username'] = username
         response = web.Response(status=302)
         response.headers['Location'] = request.POST.get('path', '/')
@@ -159,7 +164,7 @@ class Server:
 
         session = await get_session(request)
         if session.new:
-            print("websocket: not logged in")
+            logger.debug('websocket: not logged in')
             websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
             websocket.close()
             return websocket
@@ -168,12 +173,11 @@ class Server:
         self.websocket_connected(websocket, session)
 
         async for msg in websocket:
-            print("websocket got:", msg)
+            logger.debug("websocket got: %s", msg)
             if msg.type == WSMsgType.TEXT:
                 self.websocket_message(websocket, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
-                print('websocket closed with exception %s' %
-                  websocket.exception())
+                logger.debug('websocket closed with exception %s', websocket.exception())
 
         self.websockets.remove(websocket)
         self.websocket_closed(session)
@@ -262,13 +266,10 @@ class Server:
         Run cirrina server event loop.
         """
         self.loop.run_until_complete(self._start())
-        print("Server started at http://%s:%d"%(self.address, self.port))
+        logger.info("Server started at http://%s:%d", self.address, self.port)
         try:
             self.loop.run_forever()
         except KeyboardInterrupt:
             pass
         self.loop.close()
-        print("done")
-
-
-
+        logger.info('Stopped cirrina server')
