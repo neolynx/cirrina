@@ -53,13 +53,7 @@ class Server:
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
 
-    def __init__(self, address, port, loop=None):
-        #: Holds the address where the cirrina server is listening.
-        self.address = address
-
-        #: Holds the port where the cirrina server is listening.
-        self.port = port
-
+    def __init__(self, loop=None):
         if loop is None:
             loop = asyncio.get_event_loop()
         #: Holds the asyncio event loop which is used to handle requests.
@@ -74,6 +68,14 @@ class Server:
         #: Holds all websocket connections.
         self.websockets = []
 
+        #: Holds all the websocket callbacks.
+        self.on_ws_connect = []
+        self.on_ws_message = []
+        self.on_ws_disconnect = []
+
+        #: Holds all registered RPC methods.
+        self.rpc_methods = {}
+
         # setup cookie encryption for user sessions.
         fernet_key = fernet.Fernet.generate_key()
         secret_key = base64.urlsafe_b64decode(fernet_key)
@@ -85,30 +87,29 @@ class Server:
         self.authenticate = self.dummy_auth
 
         # add default routes to request handler.
-        self.post('/login', self._auth)
+        self.post('/login')(self._auth)
 
-    async def _start(self):
+    async def _start(self, address, port):
         """
         Start cirrina server.
 
         This method starts the asyncio loop server which uses
         the aiohttp web application.:
         """
-        self.srv = await self.loop.create_server(self.app.make_handler(), self.address, self.port)
+        self.srv = await self.loop.create_server(self.app.make_handler(), address, port)
 
-    @staticmethod
-    def authenticated(func):
+    def authenticated(self, func):
         """
         Decorator to enforce valid session before
         executing the decorated function.
         """
-        async def _wrapper(self, request):  # pylint: disable=missing-docstring
+        async def _wrapper(request):  # pylint: disable=missing-docstring
             session = await get_session(request)
             if session.new:
                 response = web.Response(status=302)
                 response.headers['Location'] = '/login?path='+request.path_qs
                 return response
-            return await func(self, request, session)
+            return await func(request, session)
         return _wrapper
 
     async def dummy_auth(self, username, password):
@@ -170,17 +171,20 @@ class Server:
             return websocket
 
         self.websockets.append(websocket)
-        self.websocket_connected(websocket, session)
+        for func in self.on_ws_connect:
+            await func(websocket, session)
 
         async for msg in websocket:
             logger.debug("websocket got: %s", msg)
             if msg.type == WSMsgType.TEXT:
-                self.websocket_message(websocket, session, msg.data)
+                for func in self.on_ws_message:
+                    await func(websocket, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
                 logger.debug('websocket closed with exception %s', websocket.exception())
 
         self.websockets.remove(websocket)
-        self.websocket_closed(session)
+        for func in self.on_ws_disconnect:
+            await func(session)
 
         return websocket
 
@@ -212,8 +216,7 @@ class Server:
                     return JError().internal()
 
                 try:
-                    i_app = getattr(MyRPC.cirrina, data['method'])
-                    i_app = asyncio.coroutine(i_app)
+                    i_app = MyRPC.cirrina.rpc_methods[data['method']]
                 except Exception:
                     return JError(data).method()
 
@@ -231,29 +234,42 @@ class Server:
 
         return MyRPC
 
-    def get(self, location, handler):
+    def get(self, location):
         """
         Register new HTTP GET route.
         """
-        self.app.router.add_route('GET', location, handler)
+        def _wrapper(func):
+            self.app.router.add_route('GET', location, func)
+            return func
+        return _wrapper
 
-    def post(self, location, handler):
+    def post(self, location):
         """
         Register new HTTP POST route.
         """
-        self.app.router.add_route('POST', location, handler)
+        def _wrapper(func):
+            self.app.router.add_route('POST', location, func)
+            return func
+        return _wrapper
 
-    def ws(self):
+    def enable_websockets(self):
         """
         Enable websocket communication.
         """
         self.app.router.add_route('GET', "/ws", self._ws_handler)
 
-    def rpc(self, location):
+    def enable_rpc(self, location):
         """
         Register new JSON RPC method.
         """
         self.app.router.add_route('POST', location, self._rpc_handler())
+
+    def register_rpc(self, func):
+        """
+        Register RPC method
+        """
+        self.rpc_methods[func.__name__] = func
+        return func
 
     def static(self, location, path):
         """
@@ -261,15 +277,41 @@ class Server:
         """
         self.app.router.add_static(location, path)
 
-    def run(self):
+    def websocket_connect(self, func):
+        """
+        Add callback for websocket connect event.
+        """
+        self.on_ws_connect.append(func)
+        return func
+
+    def websocket_message(self, func):
+        """
+        Add callback for websocket message event.
+        """
+        self.on_ws_message.append(func)
+        return func
+
+    def websocket_disconnect(self, func):
+        """
+        Add callback for websocket disconnect event.
+        """
+        self.on_ws_disconnect.append(func)
+        return func
+
+    def run(self, address='127.0.0.1', port=2100, debug=False):
         """
         Run cirrina server event loop.
         """
-        self.loop.run_until_complete(self._start())
-        logger.info("Server started at http://%s:%d", self.address, self.port)
+        # set cirrina logger loglevel
+        logger.setLevel(logging.DEBUG if debug else logging.INFO)
+
+        self.loop.run_until_complete(self._start(address, port))
+        logger.info("Server started at http://%s:%d", address, port)
+
         try:
             self.loop.run_forever()
         except KeyboardInterrupt:
             pass
         self.loop.close()
+
         logger.info('Stopped cirrina server')
