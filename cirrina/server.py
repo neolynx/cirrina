@@ -258,7 +258,7 @@ class Server:
         """
         self.app.router.add_route('GET', "/ws", self._ws_handler)
 
-    def rpc(self, location):
+    def enable_rpc(self, location):
         """
         Register new JSON RPC method.
         """
