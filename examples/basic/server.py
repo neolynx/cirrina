@@ -7,6 +7,7 @@ Simple cirrina server example.
 """
 
 import logging
+import asyncio
 
 from aiohttp import web
 
@@ -49,23 +50,27 @@ app.enable_rpc('/jrpc')
 
 
 @app.websocket_connect
-async def websocket_connected(ws, session):
+@asyncio.coroutine
+def websocket_connected(ws, session):
     logger.info("websocket: new authenticated connection, user: %s", session['username'])
 
 
 @app.websocket_message
-async def websocket_message(ws, session, msg):
+@asyncio.coroutine
+def websocket_message(ws, session, msg):
     logger.info("websocket: got message: %s", msg)
     app.websocket_broadcast(msg)
 
 
 @app.websocket_disconnect
-async def websocket_closed(session):
+@asyncio.coroutine
+def websocket_closed(session):
     logger.info('websocket connection closed')
 
 
 @app.get('/login')
-async def _login(request):
+@asyncio.coroutine
+def _login(request):
     """
     Send login page to client.
     """
@@ -74,7 +79,8 @@ async def _login(request):
 
 @app.get('/')
 @app.authenticated
-async def default(request, session):
+@asyncio.coroutine
+def default(request, session):
     visit_count = session['visit_count'] if 'visit_count' in session else 1
     session['visit_count'] = visit_count + 1
 
@@ -120,7 +126,8 @@ async def default(request, session):
 
 @cirrina.rpc_valid(SCH)
 @app.register_rpc
-async def hello(request, session, data):
+@asyncio.coroutine
+def hello(request, session, data):
     logger.info("jrpc hello called: %s", data["data"])
     visit_count = session['visit_count'] if 'visit_count' in session else 1
     session['visit_count'] = visit_count + 1

@@ -19,6 +19,7 @@ from aiohttp_session import setup, get_session, session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_jrpc import Service, JError, JResponse, decode
 from validictory import validate, ValidationError, SchemaError
+from aiohttp._ws_impl import WSMsgType
 
 
 #: Holds the cirrina logger instance
@@ -89,30 +90,33 @@ class Server:
         # add default routes to request handler.
         self.post('/login')(self._auth)
 
-    async def _start(self, address, port):
+    @asyncio.coroutine
+    def _start(self, address, port):
         """
         Start cirrina server.
 
         This method starts the asyncio loop server which uses
         the aiohttp web application.:
         """
-        self.srv = await self.loop.create_server(self.app.make_handler(), address, port)
+        self.srv = yield from self.loop.create_server(self.app.make_handler(), address, port)
 
     def authenticated(self, func):
         """
         Decorator to enforce valid session before
         executing the decorated function.
         """
-        async def _wrapper(request):  # pylint: disable=missing-docstring
-            session = await get_session(request)
+        @asyncio.coroutine
+        def _wrapper(request):  # pylint: disable=missing-docstring
+            session = yield from get_session(request)
             if session.new:
                 response = web.Response(status=302)
                 response.headers['Location'] = '/login?path='+request.path_qs
                 return response
-            return await func(request, session)
+            return (yield from func(request, session))
         return _wrapper
 
-    async def dummy_auth(self, username, password):
+    @asyncio.coroutine
+    def dummy_auth(self, username, password):
         """
         Dummy authentication implementation for testing purposes.
 
@@ -122,7 +126,8 @@ class Server:
             return True
         return False
 
-    async def _auth(self, request):
+    @asyncio.coroutine
+    def _auth(self, request):
         """
         Authenticate the user with the given request data.
 
@@ -130,15 +135,15 @@ class Server:
         and the ``username`` and ``password`` fields.
         On success a new session will be created.
         """
-        session = await get_session(request)
+        session = yield from get_session(request)
 
         # get username and password from POST request
-        await request.post()
+        yield from request.post()
         username = request.POST.get('username')
         password = request.POST.get('password')
 
         # check if username and password are valid
-        if not await self.authenticate(username, password):
+        if not (yield from self.authenticate(username, password)):
             logger.debug('User authentication failed: %s', username)
             response = web.Response(status=302)
             response.headers['Location'] = '/login'
@@ -151,7 +156,8 @@ class Server:
         response.headers['Location'] = request.POST.get('path', '/')
         return response
 
-    async def _ws_handler(self, request):
+    @asyncio.coroutine
+    def _ws_handler(self, request):
         """
         Handle websocket connections.
 
@@ -161,9 +167,9 @@ class Server:
             * messages
         """
         websocket = web.WebSocketResponse()
-        await websocket.prepare(request)
+        yield from websocket.prepare(request)
 
-        session = await get_session(request)
+        session = yield from get_session(request)
         if session.new:
             logger.debug('websocket: not logged in')
             websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
@@ -172,19 +178,26 @@ class Server:
 
         self.websockets.append(websocket)
         for func in self.on_ws_connect:
-            await func(websocket, session)
+            yield from func(websocket, session)
 
-        async for msg in websocket:
+        while True:
+            msg = yield from websocket.receive()
+            if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
+                logger.debug('websocket closed')
+                break
+
             logger.debug("websocket got: %s", msg)
             if msg.type == WSMsgType.TEXT:
                 for func in self.on_ws_message:
-                    await func(websocket, session, msg.data)
+                    yield from func(websocket, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
                 logger.debug('websocket closed with exception %s', websocket.exception())
 
+            asyncio.sleep(0.1)
+
         self.websockets.remove(websocket)
         for func in self.on_ws_disconnect:
-            await func(session)
+            yield from func(session)
 
         return websocket
 
