@@ -265,11 +265,11 @@ class Server:
             return func
         return _wrapper
 
-    def enable_websockets(self):
+    def enable_websockets(self, location):
         """
         Enable websocket communication.
         """
-        self.app.router.add_route('GET', "/ws", self._ws_handler)
+        self.app.router.add_route('GET', location, self._ws_handler)
 
     def enable_rpc(self, location):
         """
