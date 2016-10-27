@@ -1,6 +1,6 @@
 
 
-function Cirrina () {
+function Cirrina (path) {
     if( ! "WebSocket" in window )
     {
         log("WebSocket NOT supported by your Browser!");
@@ -24,7 +24,7 @@ function Cirrina () {
 
     this.connect = function()
     {
-        this.ws = new WebSocket("ws://" + window.location.host + "/ws");
+        this.ws = new WebSocket("ws://" + window.location.host + path);
         this.ws.cirrina = this;
 
         this.ws.onopen = function()
