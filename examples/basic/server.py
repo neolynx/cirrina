@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 #: Create cirrina app.
 app = cirrina.Server()
 app.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
-app.enable_websockets()
+app.enable_websockets('/ws')
 app.enable_rpc('/jrpc')
 
 
