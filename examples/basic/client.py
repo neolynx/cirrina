@@ -11,8 +11,8 @@ msg = input().strip()
 @asyncio.coroutine
 def rpc_call(msg):
     try:
-        rsp = yield from remote.hello(msg, 7, debug=True)
-        print("Got:", rsp)
+        ret = yield from remote.hello(msg, 7, debug=True)
+        return ret
     except InvalidResponse as err:
         return err
     except Exception as err:
@@ -20,5 +20,6 @@ def rpc_call(msg):
     return False
 
 loop = asyncio.get_event_loop()
-content = loop.run_until_complete(rpc_call(msg))
+ret = loop.run_until_complete(rpc_call(msg))
+print("Got:", ret)
 loop.close()
