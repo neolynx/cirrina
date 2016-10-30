@@ -21,7 +21,10 @@ class RPCClient(object):
         @asyncio.coroutine
         def wrapper(*args, **kw):
             ret = yield from self.remote.call(attr, {'args': args, 'kw': kw})
-            return ret
+            if ret.error:
+                if ret.error['code'] == -32602:
+                    raise TypeError(ret.error['message'])
+            return ret.result
 
         return wrapper
 
