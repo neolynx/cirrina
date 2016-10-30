@@ -193,10 +193,11 @@ class Server:
 
     def websocket_broadcast(self, msg):
         """
-        Broadcast the given message to all websocket connections.
+        Broadcast a message to all websocket connections.
         """
         for websocket in self.websockets:
-            websocket.send_str(msg)
+            # FIXME: use array
+            websocket.send_str('{"status": 200, "message": %s}'%json.dumps(msg))
 
     def _rpc_handler(self):
         """
