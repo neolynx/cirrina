@@ -1,9 +1,9 @@
 import asyncio
-import aiohttp
-from aiohttp_jrpc import Client,InvalidResponse
+from aiohttp_jrpc import InvalidResponse
+from cirrina import RPCClient
 import sys
 
-Remote = Client('http://localhost:8080/jrpc')
+remote = RPCClient('http://localhost:8080/jrpc')
 
 sys.stdout.write("Send: ")
 msg = input().strip()
@@ -11,8 +11,8 @@ msg = input().strip()
 @asyncio.coroutine
 def rpc_call(msg):
     try:
-        rsp = yield from Remote.call('hello', {'data': msg})
-        print(rsp)
+        rsp = yield from remote.hello(msg, 7, debug=True)
+        print("Got:", rsp)
     except InvalidResponse as err:
         return err
     except Exception as err:
