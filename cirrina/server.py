@@ -100,6 +100,19 @@ class Server:
         """
         self.srv = yield from self.loop.create_server(self.app.make_handler(), address, port)
 
+    @asyncio.coroutine
+    def _stop(self):
+        """
+        Stop cirrina server.
+
+        This method stops the asyncio loop server which uses
+        the aiohttp web application.:
+        """
+        logger.debug('Stopping cirrina server...')
+        for ws in self.websockets:
+            ws.close()
+        self.app.shutdown()
+
     def authenticated(self, func):
         """
         Decorator to enforce valid session before
@@ -193,7 +206,7 @@ class Server:
             elif msg.type == WSMsgType.ERROR:
                 logger.debug('websocket closed with exception %s', websocket.exception())
 
-            asyncio.sleep(0.1)
+            yield from asyncio.sleep(0.1)
 
         self.websockets.remove(websocket)
         for func in self.on_ws_disconnect:
@@ -325,6 +338,13 @@ class Server:
             self.loop.run_forever()
         except KeyboardInterrupt:
             pass
+
+        self.loop.run_until_complete(self._stop())
+        logger.debug("Closing all tasks...")
+        for task in asyncio.Task.all_tasks():
+            task.cancel()
+        self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
+        logger.debug("Closing the loop...")
         self.loop.close()
 
         logger.info('Stopped cirrina server')
