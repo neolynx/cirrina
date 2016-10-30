@@ -24,7 +24,9 @@ function Cirrina (path) {
 
     this.connect = function()
     {
-        cirrina.ws = new WebSocket("ws://" + window.location.host + path);
+        url = "ws://" + window.location.host + path;
+        console.log("cirrina: connecting to " + url);
+        cirrina.ws = new WebSocket(url);
         cirrina.ws.cirrina = cirrina;
 
         cirrina.ws.onopen = function()
@@ -59,7 +61,6 @@ function Cirrina (path) {
 
     this.send = function (msg)
     {
-        console.log("this.send " + cirrina);
         cirrina.ws.send(msg);
     };
 
