@@ -128,12 +128,12 @@ def default(request, session):
 @cirrina.rpc_valid(SCH)
 @app.register_rpc
 @asyncio.coroutine
-def hello(request, session, data):
-    logger.info("jrpc hello called: %s", data["data"])
+def hello(request, session, msg, n, debug=False):
+    logger.info("jrpc hello called: %s - %d, debug: %d", msg, n, debug)
     visit_count = session['visit_count'] if 'visit_count' in session else 1
     session['visit_count'] = visit_count + 1
-    app.websocket_broadcast(data["data"])
-    return {"status": data["data"], 'visit_count': visit_count - 1}
+    app.websocket_broadcast(msg)
+    return {"status": msg, 'visit_count': visit_count - 1}
 
 
 if __name__ == "__main__":

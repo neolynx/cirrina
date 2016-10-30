@@ -222,7 +222,10 @@ class Server:
             websocket.send_str(msg)
 
     def _rpc_handler(self):
-        class MyRPC(object):
+        """
+        Handle rpc calls.
+        """
+        class _rpc(object):
             cirrina = self
 
             def __new__(cls, ctx):
@@ -230,10 +233,10 @@ class Server:
                 return cls.__run(cls, ctx)
 
             @asyncio.coroutine
-            def __run(self, ctx):
+            def __run(self, request):
                 """ Run service """
                 try:
-                    data = yield from decode(ctx)
+                    data = yield from decode(request)
                 except ParseError:
                     return JError().parse()
                 except InvalidRequest:
@@ -242,13 +245,13 @@ class Server:
                     return JError().internal()
 
                 try:
-                    i_app = MyRPC.cirrina.rpc_methods[data['method']]
+                    method = _rpc.cirrina.rpc_methods[data['method']]
                 except Exception:
                     return JError(data).method()
 
-                session = yield from get_session(ctx)
+                session = yield from get_session(request)
                 try:
-                    resp = yield from i_app(ctx, session, data)
+                    resp = yield from method(request, session, *data['params']['args'], **data['params']['kw'])
                 except InvalidParams:
                     return JError(data).params()
                 except InternalError:
@@ -258,7 +261,7 @@ class Server:
                     "id": data['id'], "result": resp
                     })
 
-        return MyRPC
+        return _rpc
 
     def get(self, location):
         """
