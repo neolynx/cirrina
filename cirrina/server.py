@@ -59,10 +59,7 @@ class Server:
         secret_key = base64.urlsafe_b64decode(fernet_key)
         setup(self.app, EncryptedCookieStorage(secret_key))
 
-        #: Holds the method for user authentication.
-        #  This can be any method accepting username and password
-        #  and returning a bool.
-        self.authenticate = self.dummy_auth
+        self.auth_handlers = []
 
         # add default routes to request handler.
         self.post('/login')(self._auth)
@@ -90,6 +87,14 @@ class Server:
             ws.close()
         self.app.shutdown()
 
+    def auth_handler(self, func):
+        """
+        Decorator to provide one or more authentication
+        handlers.
+        """
+        self.auth_handlers.append(func)
+        return func
+
     def authenticated(self, func):
         """
         Decorator to enforce valid session before
@@ -104,17 +109,6 @@ class Server:
                 return response
             return (yield from func(request, session))
         return _wrapper
-
-    @asyncio.coroutine
-    def dummy_auth(self, username, password):
-        """
-        Dummy authentication implementation for testing purposes.
-
-        This method should be removed.
-        """
-        if username == 'test' and password == 'test':
-            return True
-        return False
 
     @asyncio.coroutine
     def _auth(self, request):
@@ -133,18 +127,19 @@ class Server:
         password = request.POST.get('password')
 
         # check if username and password are valid
-        if not (yield from self.authenticate(username, password)):
-            logger.debug('User authentication failed: %s', username)
-            response = web.Response(status=302)
-            response.headers['Location'] = '/login'
-            session.invalidate()
-            return response
-
-        logger.debug('User authenticated: %s', username)
-        session['username'] = username
+        for auth_handler in self.auth_handlers:
+            if (yield from auth_handler(username, password)) == True:
+                logger.debug('User authenticated: %s', username)
+                session['username'] = username
+                response = web.Response(status=302)
+                response.headers['Location'] = request.POST.get('path', '/')
+                return response
+        logger.debug('User authentication failed: %s', username)
         response = web.Response(status=302)
-        response.headers['Location'] = request.POST.get('path', '/')
+        response.headers['Location'] = '/login'
+        session.invalidate()
         return response
+
 
     @asyncio.coroutine
     def _ws_handler(self, request):

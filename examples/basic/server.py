@@ -40,6 +40,12 @@ wspath = '/ws'
 app.enable_websockets(wspath)
 app.enable_rpc('/jrpc')
 
+@app.auth_handler
+@asyncio.coroutine
+def auth_handler(username, password):
+    if username == 'admin' and password == 'admin':
+        return True
+    return False
 
 @app.websocket_connect
 @asyncio.coroutine
