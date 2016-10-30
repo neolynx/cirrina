@@ -206,9 +206,9 @@ class Server:
         class _rpc(object):
             cirrina = self
 
-            def __new__(cls, ctx):
+            def __new__(cls, request):
                 """ Return on call class """
-                return cls.__run(cls, ctx)
+                return cls.__run(cls, request)
 
             @asyncio.coroutine
             def __run(self, request):
