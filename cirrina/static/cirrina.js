@@ -1,11 +1,11 @@
-
-
 function Cirrina (path) {
     if( ! "WebSocket" in window )
     {
-        log("WebSocket NOT supported by your Browser!");
+        console.log("WebSocket NOT supported by your Browser!");
         return;
     }
+
+    cirrina = this;
 
     this.onopen = function(ws)
     {
@@ -24,23 +24,24 @@ function Cirrina (path) {
 
     this.connect = function()
     {
-        this.ws = new WebSocket("ws://" + window.location.host + path);
-        this.ws.cirrina = this;
+        cirrina.ws = new WebSocket("ws://" + window.location.host + path);
+        cirrina.ws.cirrina = cirrina;
 
-        this.ws.onopen = function()
+        cirrina.ws.onopen = function()
         {
             cirrina.onopen(this);
         };
 
-        this.ws.onmessage = function (evt)
+        cirrina.ws.onmessage = function (evt)
         {
             try {
-                var msg = JSON.parse(evt.data);
-                if(msg.status = 401)
+                var json = JSON.parse(evt.data);
+                if(json.status == 401)
                 {
                     location.reload();
                     return;
                 }
+                msg = json.message;
             } catch (e) {
                 console.log("websocket non json message: " + evt.data);
                 msg = evt.data;
@@ -49,7 +50,7 @@ function Cirrina (path) {
             cirrina.onmessage(this, msg);
         };
 
-        this.ws.onclose = function()
+        cirrina.ws.onclose = function()
         {
             setTimeout(cirrina.connect, 1000);
             cirrina.onclose();
@@ -58,8 +59,9 @@ function Cirrina (path) {
 
     this.send = function (msg)
     {
-        this.ws.send(msg);
+        console.log("this.send " + cirrina);
+        cirrina.ws.send(msg);
     };
 
-    this.connect();
+    window.addEventListener("load", this.connect, false);
 }
