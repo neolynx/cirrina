@@ -30,15 +30,6 @@ LOGIN_HTML = '''<!DOCTYPE HTML>
 '''
 
 
-#: Holds the JSON RPC schema
-SCH = {
-    "type": "object",
-    "properties": {
-        "data": {"type": "string"},
-    },
-}
-
-
 #: Holds the logger for the current example
 logger = logging.getLogger(__name__)
 
@@ -125,7 +116,6 @@ def default(request, session):
     return resp
 
 
-@cirrina.rpc_valid(SCH)
 @app.register_rpc
 @asyncio.coroutine
 def hello(request, session, msg, n, debug=False):
