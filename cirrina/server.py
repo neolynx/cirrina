@@ -17,35 +17,12 @@ from cryptography import fernet
 from aiohttp import web, WSMsgType
 from aiohttp_session import setup, get_session, session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from aiohttp_jrpc import Service, JError, JResponse, decode
+from aiohttp_jrpc import JError, JResponse, decode, InvalidParams, InternalError
 from validictory import validate, ValidationError, SchemaError
 from aiohttp._ws_impl import WSMsgType
 
-
 #: Holds the cirrina logger instance
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-
-
-def rpc_valid(schema=None):
-    """
-    Validation data by specific validictory configuration.
-    """
-    def decorator(func):  # pylint: disable=missing-docstring
-        @wraps(func)
-        def d_func(self, ctx, session, data, *a, **kw):
-            """
-            Decorator for schema validation.
-            """
-            try:
-                validate(data['params'], schema)
-            except ValidationError as err:
-                raise InvalidParams(err)
-            except SchemaError as err:
-                raise InternalError(err)
-            return func(self, ctx, session, data['params'], *a, **kw)
-        return d_func
-    return decorator
-
 
 class Server:
     """
