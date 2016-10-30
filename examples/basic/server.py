@@ -45,7 +45,8 @@ logger = logging.getLogger(__name__)
 #: Create cirrina app.
 app = cirrina.Server()
 app.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
-app.enable_websockets('/ws')
+wspath = '/ws'
+app.enable_websockets(wspath)
 app.enable_rpc('/jrpc')
 
 
@@ -94,7 +95,7 @@ def default(request, session):
     document.body.innerHTML += msg + "<br/>";
     /*alert( msg );*/
   }
-  var cirrina = new Cirrina();
+  var cirrina = new Cirrina('%s');
 
   cirrina.onopen = function(ws)
   {
@@ -119,7 +120,7 @@ def default(request, session):
  visit count: %d <br/>
 </body>
 </html>
-'''%visit_count
+'''%(wspath, visit_count)
     resp = web.Response(text=html, content_type="text/html")
     return resp
 
