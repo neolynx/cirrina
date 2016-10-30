@@ -229,8 +229,12 @@ class Server:
                 session = yield from get_session(request)
                 try:
                     resp = yield from method(request, session, *data['params']['args'], **data['params']['kw'])
-                except InvalidParams:
-                    return JError(data).params()
+                except TypeError as e:
+                    # workaround for JError.custom bug
+                    return JResponse(jsonrpc={
+                        'id': data['id'],
+                        'error': {'code': -32602, 'message': str(e)},
+                    })
                 except InternalError:
                     return JError(data).internal()
 
