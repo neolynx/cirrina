@@ -258,6 +258,33 @@ class Server:
             return func
         return _wrapper
 
+    def put(self, location):
+        """
+        Register new HTTP PUT route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('PUT', location, func)
+            return func
+        return _wrapper
+
+    def patch(self, location):
+        """
+        Register new HTTP PATCH route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('PATCH', location, func)
+            return func
+        return _wrapper
+
+    def delete(self, location):
+        """
+        Register new HTTP DELETE route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('DELETE', location, func)
+            return func
+        return _wrapper
+
     def enable_websockets(self, location):
         """
         Enable websocket communication.
