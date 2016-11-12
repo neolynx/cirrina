@@ -1,3 +1,5 @@
+<img src="cirrina.jpg" width="200">
+
 # cirrina
 
 **cirrina** is an opinionated asynchronous web framework based on aiohttp.
