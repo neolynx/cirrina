@@ -1,8 +1,14 @@
-<img src="cirrina.jpg" width="100">
-
+<img align="right" src="cirrina.jpg" width="200">
 # cirrina
 
 **cirrina** is an opinionated asynchronous web framework based on aiohttp.
+
+**Features**:
+
+- [x] HTTP Server
+- [x] Websocket Server
+- [x] JSON RPC Server
+- [x] Shared sessions between used servers
 
 ```python
 from cirrina import Server
