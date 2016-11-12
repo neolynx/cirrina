@@ -59,10 +59,14 @@ class Server:
         secret_key = base64.urlsafe_b64decode(fernet_key)
         setup(self.app, EncryptedCookieStorage(secret_key))
 
+        #: Holds authentication function
         self.auth_handlers = []
+        #: Holds function which are called upon logout
+        self.logout_handlers = []
 
         # add default routes to request handler.
         self.post('/login')(self._auth)
+        self.post('/logout')(self._logout)
 
     @asyncio.coroutine
     def _start(self, address, port):
@@ -93,6 +97,14 @@ class Server:
         handlers.
         """
         self.auth_handlers.append(func)
+        return func
+
+    def logout_handler(self, func):
+        """
+        Decorator to specify function which should
+        be called upon user logout.
+        """
+        self.logout_handlers.append(func)
         return func
 
     def authenticated(self, func):
@@ -139,6 +151,27 @@ class Server:
         response.headers['Location'] = '/login'
         session.invalidate()
         return response
+
+    @asyncio.coroutine
+    def _logout(self, request):
+        """
+        Logout the user which is used in this request session.
+
+        If the request is not part of a user session - nothing happens.
+        """
+        session = yield from get_session(request)
+
+        if not session:
+            logger.debug('No valid session in request for logout')
+            return web.Response(status=200)  # FIXME: what should be returned?
+
+        # run all logout handlers before invalidating session
+        for func in self.logout_handlers:
+            func(session)
+
+        logger.debug('Logout user from session')
+        session.invalidate()
+        return web.Response(status=200)
 
 
     @asyncio.coroutine
