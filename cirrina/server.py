@@ -249,12 +249,57 @@ class Server:
             return func
         return _wrapper
 
+    def head(self, location):
+        """
+        Register new HTTP HEAD route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('HEAD', location, func)
+            return func
+        return _wrapper
+
+    def options(self, location):
+        """
+        Register new HTTP OPTIONS route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('OPTIONS', location, func)
+            return func
+        return _wrapper
+
     def post(self, location):
         """
         Register new HTTP POST route.
         """
         def _wrapper(func):
             self.app.router.add_route('POST', location, func)
+            return func
+        return _wrapper
+
+    def put(self, location):
+        """
+        Register new HTTP PUT route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('PUT', location, func)
+            return func
+        return _wrapper
+
+    def patch(self, location):
+        """
+        Register new HTTP PATCH route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('PATCH', location, func)
+            return func
+        return _wrapper
+
+    def delete(self, location):
+        """
+        Register new HTTP DELETE route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('DELETE', location, func)
             return func
         return _wrapper
 
