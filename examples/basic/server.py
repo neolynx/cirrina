@@ -68,7 +68,7 @@ def websocket_closed(session):
 
 @app.get('/login')
 @asyncio.coroutine
-def _login(request):
+def _login(request, session):
     """
     Send login page to client.
     """

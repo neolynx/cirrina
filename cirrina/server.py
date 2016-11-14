@@ -24,6 +24,12 @@ from aiohttp._ws_impl import WSMsgType
 #: Holds the cirrina logger instance
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+def _session_wrapper(func):
+    def _addsess(request):
+        session = yield from get_session(request)
+        return (yield from func(request, session))
+    return _addsess
+
 class Server:
     """
     cirrina Server implementation.
@@ -113,8 +119,7 @@ class Server:
         executing the decorated function.
         """
         @asyncio.coroutine
-        def _wrapper(request):  # pylint: disable=missing-docstring
-            session = yield from get_session(request)
+        def _wrapper(request, session):  # pylint: disable=missing-docstring
             if session.new:
                 response = web.Response(status=302)
                 response.headers['Location'] = '/login?path='+request.path_qs
@@ -123,7 +128,7 @@ class Server:
         return _wrapper
 
     @asyncio.coroutine
-    def _auth(self, request):
+    def _auth(self, request, session):
         """
         Authenticate the user with the given request data.
 
@@ -131,7 +136,6 @@ class Server:
         and the ``username`` and ``password`` fields.
         On success a new session will be created.
         """
-        session = yield from get_session(request)
 
         # get username and password from POST request
         yield from request.post()
@@ -273,12 +277,15 @@ class Server:
 
         return _rpc
 
+
+    ### HTTP protocol ###
+
     def get(self, location):
         """
         Register new HTTP GET route.
         """
         def _wrapper(func):
-            self.app.router.add_route('GET', location, func)
+            self.app.router.add_route('GET', location, _session_wrapper(func))
             return func
         return _wrapper
 
@@ -287,7 +294,7 @@ class Server:
         Register new HTTP HEAD route.
         """
         def _wrapper(func):
-            self.app.router.add_route('HEAD', location, func)
+            self.app.router.add_route('HEAD', location, _session_wrapper(func))
             return func
         return _wrapper
 
@@ -296,7 +303,7 @@ class Server:
         Register new HTTP OPTIONS route.
         """
         def _wrapper(func):
-            self.app.router.add_route('OPTIONS', location, func)
+            self.app.router.add_route('OPTIONS', location, _session_wrapper(func))
             return func
         return _wrapper
 
@@ -305,7 +312,7 @@ class Server:
         Register new HTTP POST route.
         """
         def _wrapper(func):
-            self.app.router.add_route('POST', location, func)
+            self.app.router.add_route('POST', location, _session_wrapper(func))
             return func
         return _wrapper
 
@@ -314,7 +321,7 @@ class Server:
         Register new HTTP PUT route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PUT', location, func)
+            self.app.router.add_route('PUT', location, _session_wrapper(func))
             return func
         return _wrapper
 
@@ -323,7 +330,7 @@ class Server:
         Register new HTTP PATCH route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PATCH', location, func)
+            self.app.router.add_route('PATCH', location, _session_wrapper(func))
             return func
         return _wrapper
 
@@ -332,7 +339,7 @@ class Server:
         Register new HTTP DELETE route.
         """
         def _wrapper(func):
-            self.app.router.add_route('DELETE', location, func)
+            self.app.router.add_route('DELETE', location, _session_wrapper(func))
             return func
         return _wrapper
 
