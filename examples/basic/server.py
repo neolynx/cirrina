@@ -7,6 +7,7 @@ Simple cirrina server example.
 """
 
 import logging
+import asyncio
 
 from aiohttp import web
 
@@ -29,52 +30,54 @@ LOGIN_HTML = '''<!DOCTYPE HTML>
 '''
 
 
-#: Holds the JSON RPC schema
-SCH = {
-    "type": "object",
-    "properties": {
-        "data": {"type": "string"},
-    },
-}
-
-
 #: Holds the logger for the current example
 logger = logging.getLogger(__name__)
 
 #: Create cirrina app.
 app = cirrina.Server()
-app.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
-app.enable_websockets()
+app.http_static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
+wspath = '/ws'
+app.enable_websockets(wspath)
 app.enable_rpc('/jrpc')
 
+@app.auth_handler
+@asyncio.coroutine
+def auth_handler(username, password):
+    if username == 'admin' and password == 'admin':
+        return True
+    return False
 
 @app.websocket_connect
-async def websocket_connected(ws, session):
+@asyncio.coroutine
+def websocket_connected(ws, session):
     logger.info("websocket: new authenticated connection, user: %s", session['username'])
 
 
 @app.websocket_message
-async def websocket_message(ws, session, msg):
+@asyncio.coroutine
+def websocket_message(ws, session, msg):
     logger.info("websocket: got message: %s", msg)
     app.websocket_broadcast(msg)
 
 
 @app.websocket_disconnect
-async def websocket_closed(session):
+@asyncio.coroutine
+def websocket_closed(session):
     logger.info('websocket connection closed')
 
 
-@app.get('/login')
-async def _login(request):
+@app.http_get('/login')
+@asyncio.coroutine
+def _login(request, session):
     """
     Send login page to client.
     """
     return web.Response(text=LOGIN_HTML.format(request.GET.get('path', "/")), content_type="text/html")
 
-
-@app.get('/')
+@app.http_get('/')
 @app.authenticated
-async def default(request, session):
+@asyncio.coroutine
+def default(request, session):
     visit_count = session['visit_count'] if 'visit_count' in session else 1
     session['visit_count'] = visit_count + 1
 
@@ -88,7 +91,7 @@ async def default(request, session):
     document.body.innerHTML += msg + "<br/>";
     /*alert( msg );*/
   }
-  var cirrina = new Cirrina();
+  var cirrina = new Cirrina('%s');
 
   cirrina.onopen = function(ws)
   {
@@ -113,19 +116,19 @@ async def default(request, session):
  visit count: %d <br/>
 </body>
 </html>
-'''%visit_count
+'''%(wspath, visit_count)
     resp = web.Response(text=html, content_type="text/html")
     return resp
 
 
-@cirrina.rpc_valid(SCH)
-@app.register_rpc
-async def hello(request, session, data):
-    logger.info("jrpc hello called: %s", data["data"])
+@app.jrpc
+@asyncio.coroutine
+def hello(request, session, msg, n, debug=False):
+    logger.info("jrpc hello called: %s - %d, debug: %d", msg, n, debug)
     visit_count = session['visit_count'] if 'visit_count' in session else 1
     session['visit_count'] = visit_count + 1
-    app.websocket_broadcast(data["data"])
-    return {"status": data["data"], 'visit_count': visit_count - 1}
+    app.websocket_broadcast(msg)
+    return {"status": msg, 'visit_count': visit_count - 1}
 
 
 if __name__ == "__main__":
