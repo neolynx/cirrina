@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 #: Create cirrina app.
 app = cirrina.Server()
-app.static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
+app.http_static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
 wspath = '/ws'
 app.enable_websockets(wspath)
 app.enable_rpc('/jrpc')
@@ -66,7 +66,7 @@ def websocket_closed(session):
     logger.info('websocket connection closed')
 
 
-@app.get('/login')
+@app.http_get('/login')
 @asyncio.coroutine
 def _login(request, session):
     """
@@ -74,8 +74,7 @@ def _login(request, session):
     """
     return web.Response(text=LOGIN_HTML.format(request.GET.get('path', "/")), content_type="text/html")
 
-
-@app.get('/')
+@app.http_get('/')
 @app.authenticated
 @asyncio.coroutine
 def default(request, session):
@@ -122,7 +121,7 @@ def default(request, session):
     return resp
 
 
-@app.register_rpc
+@app.jrpc
 @asyncio.coroutine
 def hello(request, session, msg, n, debug=False):
     logger.info("jrpc hello called: %s - %d, debug: %d", msg, n, debug)

@@ -24,11 +24,13 @@ from aiohttp._ws_impl import WSMsgType
 #: Holds the cirrina logger instance
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+
 def _session_wrapper(func):
     def _addsess(request):
         session = yield from get_session(request)
         return (yield from func(request, session))
     return _addsess
+
 
 class Server:
     """
@@ -71,8 +73,8 @@ class Server:
         self.logout_handlers = []
 
         # add default routes to request handler.
-        self.post('/login')(self._auth)
-        self.post('/logout')(self._logout)
+        self.http_post('/login')(self._auth)
+        self.http_post('/logout')(self._logout)
 
     @asyncio.coroutine
     def _start(self, address, port):
@@ -97,6 +99,34 @@ class Server:
             ws.close()
         self.app.shutdown()
 
+    def run(self, address='127.0.0.1', port=2100, debug=False):
+        """
+        Run cirrina server event loop.
+        """
+        # set cirrina logger loglevel
+        logger.setLevel(logging.DEBUG if debug else logging.INFO)
+
+        self.loop.run_until_complete(self._start(address, port))
+        logger.info("Server started at http://%s:%d", address, port)
+
+        try:
+            self.loop.run_forever()
+        except KeyboardInterrupt:
+            pass
+
+        self.loop.run_until_complete(self._stop())
+        logger.debug("Closing all tasks...")
+        for task in asyncio.Task.all_tasks():
+            task.cancel()
+        self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
+        logger.debug("Closing the loop...")
+        self.loop.close()
+
+        logger.info('Stopped cirrina server')
+
+
+    ### Authentication ###
+
     def auth_handler(self, func):
         """
         Decorator to provide one or more authentication
@@ -112,20 +142,6 @@ class Server:
         """
         self.logout_handlers.append(func)
         return func
-
-    def authenticated(self, func):
-        """
-        Decorator to enforce valid session before
-        executing the decorated function.
-        """
-        @asyncio.coroutine
-        def _wrapper(request, session):  # pylint: disable=missing-docstring
-            if session.new:
-                response = web.Response(status=302)
-                response.headers['Location'] = '/login?path='+request.path_qs
-                return response
-            return (yield from func(request, session))
-        return _wrapper
 
     @asyncio.coroutine
     def _auth(self, request, session):
@@ -177,6 +193,130 @@ class Server:
         session.invalidate()
         return web.Response(status=200)
 
+    def authenticated(self, func):
+        """
+        Decorator to enforce valid session before
+        executing the decorated function.
+        """
+        @asyncio.coroutine
+        def _wrapper(request, session):  # pylint: disable=missing-docstring
+            if session.new:
+                response = web.Response(status=302)
+                response.headers['Location'] = '/login?path='+request.path_qs
+                return response
+            return (yield from func(request, session))
+        return _wrapper
+
+
+    ### HTTP protocol ###
+
+    def http_static(self, location, path):
+        """
+        Register new route to static path.
+        """
+        self.app.router.add_static(location, path)
+
+
+    def http_get(self, location):
+        """
+        Register HTTP GET route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('GET', location, _session_wrapper(func))
+            return func
+        return _wrapper
+
+    def http_head(self, location):
+        """
+        Register HTTP HEAD route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('HEAD', location, _session_wrapper(func))
+            return func
+        return _wrapper
+
+    def http_options(self, location):
+        """
+        Register HTTP OPTIONS route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('OPTIONS', location, _session_wrapper(func))
+            return func
+        return _wrapper
+
+    def http_post(self, location):
+        """
+        Register HTTP POST route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('POST', location, _session_wrapper(func))
+            return func
+        return _wrapper
+
+    def http_put(self, location):
+        """
+        Register HTTP PUT route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('PUT', location, _session_wrapper(func))
+            return func
+        return _wrapper
+
+    def http_patch(self, location):
+        """
+        Register HTTP PATCH route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('PATCH', location, _session_wrapper(func))
+            return func
+        return _wrapper
+
+    def http_delete(self, location):
+        """
+        Register HTTP DELETE route.
+        """
+        def _wrapper(func):
+            self.app.router.add_route('DELETE', location, _session_wrapper(func))
+            return func
+        return _wrapper
+
+
+    ### WebSocket protocol ###
+
+    def enable_websockets(self, location):
+        """
+        Enable websocket communication.
+        """
+        self.app.router.add_route('GET', location, self._ws_handler)
+
+    def websocket_broadcast(self, msg):
+        """
+        Broadcast a message to all websocket connections.
+        """
+        for websocket in self.websockets:
+            # FIXME: use array
+            websocket.send_str('{"status": 200, "message": %s}'%json.dumps(msg))
+
+    def websocket_connect(self, func):
+        """
+        Add callback for websocket connect event.
+        """
+        self.on_ws_connect.append(func)
+        return func
+
+    def websocket_message(self, func):
+        """
+        Add callback for websocket message event.
+        """
+        self.on_ws_message.append(func)
+        return func
+
+    def websocket_disconnect(self, func):
+        """
+        Add callback for websocket disconnect event.
+        """
+        self.on_ws_disconnect.append(func)
+        return func
 
     @asyncio.coroutine
     def _ws_handler(self, request):
@@ -223,13 +363,21 @@ class Server:
 
         return websocket
 
-    def websocket_broadcast(self, msg):
+
+    ### JRPC protocol ###
+
+    def enable_rpc(self, location):
         """
-        Broadcast a message to all websocket connections.
+        Register new JSON RPC method.
         """
-        for websocket in self.websockets:
-            # FIXME: use array
-            websocket.send_str('{"status": 200, "message": %s}'%json.dumps(msg))
+        self.app.router.add_route('POST', location, self._rpc_handler())
+
+    def jrpc(self, func):
+        """
+        Register RPC method
+        """
+        self.rpc_methods[func.__name__] = func
+        return func
 
     def _rpc_handler(self):
         """
@@ -276,140 +424,3 @@ class Server:
                     })
 
         return _rpc
-
-
-    ### HTTP protocol ###
-
-    def get(self, location):
-        """
-        Register new HTTP GET route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('GET', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def head(self, location):
-        """
-        Register new HTTP HEAD route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('HEAD', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def options(self, location):
-        """
-        Register new HTTP OPTIONS route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('OPTIONS', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def post(self, location):
-        """
-        Register new HTTP POST route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('POST', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def put(self, location):
-        """
-        Register new HTTP PUT route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('PUT', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def patch(self, location):
-        """
-        Register new HTTP PATCH route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('PATCH', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def delete(self, location):
-        """
-        Register new HTTP DELETE route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('DELETE', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def enable_websockets(self, location):
-        """
-        Enable websocket communication.
-        """
-        self.app.router.add_route('GET', location, self._ws_handler)
-
-    def enable_rpc(self, location):
-        """
-        Register new JSON RPC method.
-        """
-        self.app.router.add_route('POST', location, self._rpc_handler())
-
-    def register_rpc(self, func):
-        """
-        Register RPC method
-        """
-        self.rpc_methods[func.__name__] = func
-        return func
-
-    def static(self, location, path):
-        """
-        Register new route to static path.
-        """
-        self.app.router.add_static(location, path)
-
-    def websocket_connect(self, func):
-        """
-        Add callback for websocket connect event.
-        """
-        self.on_ws_connect.append(func)
-        return func
-
-    def websocket_message(self, func):
-        """
-        Add callback for websocket message event.
-        """
-        self.on_ws_message.append(func)
-        return func
-
-    def websocket_disconnect(self, func):
-        """
-        Add callback for websocket disconnect event.
-        """
-        self.on_ws_disconnect.append(func)
-        return func
-
-    def run(self, address='127.0.0.1', port=2100, debug=False):
-        """
-        Run cirrina server event loop.
-        """
-        # set cirrina logger loglevel
-        logger.setLevel(logging.DEBUG if debug else logging.INFO)
-
-        self.loop.run_until_complete(self._start(address, port))
-        logger.info("Server started at http://%s:%d", address, port)
-
-        try:
-            self.loop.run_forever()
-        except KeyboardInterrupt:
-            pass
-
-        self.loop.run_until_complete(self._stop())
-        logger.debug("Closing all tasks...")
-        for task in asyncio.Task.all_tasks():
-            task.cancel()
-        self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
-        logger.debug("Closing the loop...")
-        self.loop.close()
-
-        logger.info('Stopped cirrina server')
