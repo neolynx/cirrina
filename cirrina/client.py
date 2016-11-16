@@ -15,9 +15,6 @@ class RPCClient(object):
         self.remote = aiohttp_jrpc.Client(url)
 
     def __getattr__(self, attr):
-        if attr == '__init__':
-            return __init__
-
         @asyncio.coroutine
         def wrapper(*args, **kw):
             ret = yield from self.remote.call(attr, {'args': args, 'kw': kw})
