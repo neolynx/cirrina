@@ -39,11 +39,15 @@ class Server:
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
 
-    def __init__(self, loop=None):
+    def __init__(self, loop=None, login_url="/login", logout_url="/logout"):
         if loop is None:
             loop = asyncio.get_event_loop()
         #: Holds the asyncio event loop which is used to handle requests.
         self.loop = loop
+
+        # remember the login/logout urls
+        self.login_url = login_url
+        self.logout_url = logout_url
 
         #: Holds the aiohttp web application instance.
         self.app = web.Application(loop=self.loop) #, middlewares=[session_middleware])
@@ -73,8 +77,8 @@ class Server:
         self.logout_handlers = []
 
         # add default routes to request handler.
-        self.http_post('/login')(self._auth)
-        self.http_post('/logout')(self._logout)
+        self.http_post(self.login_url)(self._auth)
+        self.http_post(self.logout_url)(self._logout)
 
     @asyncio.coroutine
     def _start(self, address, port):
@@ -168,7 +172,7 @@ class Server:
                 return response
         logger.debug('User authentication failed: %s', username)
         response = web.Response(status=302)
-        response.headers['Location'] = '/login'
+        response.headers['Location'] = self.login_url
         session.invalidate()
         return response
 
@@ -201,7 +205,7 @@ class Server:
         def _wrapper(request, session):  # pylint: disable=missing-docstring
             if session.new:
                 response = web.Response(status=302)
-                response.headers['Location'] = '/login?path='+request.path_qs
+                response.headers['Location'] = self.login_url + "?path=" + request.path_qs
                 return response
             return (yield from func(request, session))
         return _wrapper
