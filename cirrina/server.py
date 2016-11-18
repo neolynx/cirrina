@@ -173,13 +173,12 @@ class Server:
         return response
 
     @asyncio.coroutine
-    def _logout(self, request):
+    def _logout(self, request, session):
         """
         Logout the user which is used in this request session.
 
         If the request is not part of a user session - nothing happens.
         """
-        session = yield from get_session(request)
 
         if not session:
             logger.debug('No valid session in request for logout')
