@@ -46,7 +46,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
         'Operating System :: OS Independent',
-        'License :: OSI Approved :: LGPL License',
+        'License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)',
         'Topic :: Utilities'
     ],
 )
