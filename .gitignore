@@ -11,3 +11,15 @@ env/
 *.egg-info/
 build/
 dist/
+
+# debuild files
+.pybuild/
+cirrina-big.jpg
+debian/debhelper-build-stamp
+debian/files
+debian/python3-cirrina.debhelper.log
+debian/python3-cirrina.postinst.debhelper
+debian/python3-cirrina.prerm.debhelper
+debian/python3-cirrina.substvars
+debian/python3-cirrina/
+
