@@ -20,12 +20,15 @@ from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_jrpc import JError, JResponse, decode, InvalidParams, InternalError
 from validictory import validate, ValidationError, SchemaError
 from aiohttp._ws_impl import WSMsgType
+from aiohttp_swagger import setup_swagger
+from functools import wraps
 
 #: Holds the cirrina logger instance
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def _session_wrapper(func):
+    @wraps(func)
     def _addsess(request):
         session = yield from get_session(request)
         return (yield from func(request, session))
@@ -77,8 +80,16 @@ class Server:
         self.logout_handlers = []
 
         # add default routes to request handler.
-        self.http_post(self.login_url)(self._auth)
+        self.http_post(self.login_url)(self._login)
         self.http_post(self.logout_url)(self._logout)
+
+        # swagger documentation
+        self.title = "Cirrina based web application"
+        self.description = """Cirrina is a web application framework using aiohttp.
+                              See https://github.com/neolynx/cirrina."""
+        self.api_version = "0.1"
+        self.contact = "André Roth <neolynx@gmail.com>"
+
 
     @asyncio.coroutine
     def _start(self, address, port):
@@ -88,6 +99,14 @@ class Server:
         This method starts the asyncio loop server which uses
         the aiohttp web application.:
         """
+
+        # setup API documentation
+        setup_swagger(self.app,
+                      description=self.description,
+                      title=self.title,
+                      api_version=self.api_version,
+                      contact=self.contact)
+
         self.srv = yield from self.loop.create_server(self.app.make_handler(), address, port)
 
     @asyncio.coroutine
@@ -148,13 +167,39 @@ class Server:
         return func
 
     @asyncio.coroutine
-    def _auth(self, request, session):
+    def _login(self, request, session):
         """
         Authenticate the user with the given request data.
 
         Username and Password a received with the HTTP POST data
         and the ``username`` and ``password`` fields.
         On success a new session will be created.
+
+        ---
+        description: This is the login handler
+        tags:
+        - Authentication
+        consumes:
+        - application/x-www-form-urlencoded
+        parameters:
+        - name: username
+          in: formData
+          required: true
+          pattern: '[a-z0-9]{8,64}'
+          minLength: 8
+          maxLength: 64
+          type: string
+        - name: password
+          in: formData
+          required: true
+          type: string
+        produces:
+        - text/plain
+        responses:
+            "302":
+                description: successful login.
+            "405":
+                description: invalid HTTP Method
         """
 
         # get username and password from POST request
@@ -182,6 +227,16 @@ class Server:
         Logout the user which is used in this request session.
 
         If the request is not part of a user session - nothing happens.
+
+        ---
+        description: This is the logout handler
+        tags:
+        - Authentication
+        produces:
+        - text/plain
+        responses:
+            "200":
+                description: successful logout.
         """
 
         if not session:
@@ -201,6 +256,7 @@ class Server:
         Decorator to enforce valid session before
         executing the decorated function.
         """
+        @wraps(func)
         @asyncio.coroutine
         def _wrapper(request, session):  # pylint: disable=missing-docstring
             if session.new:
