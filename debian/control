@@ -2,10 +2,10 @@ Source: cirrina
 Maintainer: André Roth <neolynx@gmail.com>
 Section: python
 Priority: optional
-Build-Depends: debhelper (>= 7), dh-python, python3-setuptools, python3-all, python3-all, python3-cryptography, python3-aiohttp
+Build-Depends: debhelper (>= 7), dh-python, python3-setuptools, python3-all, python3-cryptography, python3-aiohttp, python3-aiohttp-jrpc, python3-aiohttp-session, python3-aiohttp-swagger
 Standards-Version: 3.9.7
 
 Package: python3-cirrina
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python3-aiohttp, python3-aiohttp-jrpc, python3-aiohttp-session, python3-cryptography
+Depends: ${misc:Depends}, ${python:Depends}, python3-cryptography, python3-aiohttp, python3-aiohttp-jrpc, python3-aiohttp-session, python3-aiohttp-swagger
 Description: Opinionated asynchronous web framework based on aiohttp

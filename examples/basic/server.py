@@ -78,6 +78,20 @@ def _login(request, session):
 @app.authenticated
 @asyncio.coroutine
 def default(request, session):
+    """
+    ---
+    description: This is the default page
+    tags:
+    - Defaulty Default
+    produces:
+    - text/html
+    responses:
+        "200":
+            description: successful operation.
+        "405":
+            description: invalid HTTP Method
+    """
+
     visit_count = session['visit_count'] if 'visit_count' in session else 1
     session['visit_count'] = visit_count + 1
 
