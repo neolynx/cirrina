@@ -84,12 +84,51 @@ class Server:
         self.http_post(self.logout_url)(self._logout)
 
         # swagger documentation
-        self.title = "Cirrina based web application"
-        self.description = """Cirrina is a web application framework using aiohttp.
-                              See https://github.com/neolynx/cirrina."""
-        self.api_version = "0.1"
-        self.contact = "André Roth <neolynx@gmail.com>"
+        self.__title = "Cirrina based web application"
+        self.__description = """Cirrina is a web application framework using aiohttp.
+        See https://github.com/neolynx/cirrina."""
+        self.__api_version = "0.1"
+        self.__contact = "André Roth <neolynx@gmail.com>"
 
+    @property
+    def title(self):
+        """Returns title"""
+        return self.__title
+
+    @title.setter
+    def title(self, title):
+        """Sets title"""
+        self.__title = title
+
+    @property
+    def description(self):
+        """Returns description"""
+        return self.__description
+
+    @description.setter
+    def description(self, description):
+        """Sets description"""
+        self.__description = description
+
+    @property
+    def api_version(self):
+        """Returns api_version"""
+        return self.__api_version
+
+    @api_version.setter
+    def api_version(self, api_version):
+        """Sets api_version"""
+        self.__api_version = api_version
+
+    @property
+    def contact(self):
+        """Returns contact"""
+        return self._contact
+
+    @contact.setter
+    def contact(self, contact):
+        """Sets contact"""
+        self._contact = contact
 
     @asyncio.coroutine
     def _start(self, address, port):
