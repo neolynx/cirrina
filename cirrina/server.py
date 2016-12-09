@@ -74,10 +74,14 @@ class Server:
         secret_key = base64.urlsafe_b64decode(fernet_key)
         setup(self.app, EncryptedCookieStorage(secret_key))
 
-        #: Holds authentication function
+        #: Holds authentication functions
         self.auth_handlers = []
-        #: Holds function which are called upon logout
+        #: Holds functions which are called upon logout
         self.logout_handlers = []
+        #: Holds functions which are called on startup
+        self.startup_handlers = []
+        #: Holds functions which are called on shutdown
+        self.shutdown_handlers = []
 
         # add default routes to request handler.
         self.http_post(self.login_url)(self._login)
@@ -107,6 +111,9 @@ class Server:
                       api_version=self.api_version,
                       contact=self.contact)
 
+        for handler in self.startup_handlers:
+            handler()
+
         self.srv = yield from self.loop.create_server(self.app.make_handler(), address, port)
 
     @asyncio.coroutine
@@ -118,6 +125,8 @@ class Server:
         the aiohttp web application.:
         """
         logger.debug('Stopping cirrina server...')
+        for handler in self.shutdown_handlers:
+            handler()
         for ws in self.websockets:
             ws.close()
         self.app.shutdown()
@@ -146,6 +155,24 @@ class Server:
         self.loop.close()
 
         logger.info('Stopped cirrina server')
+
+
+    def startup(self, func):
+        """
+        Decorator to provide one or more startup
+        handlers.
+        """
+        self.startup_handlers.append(func)
+        return func
+
+
+    def shutdown(self, func):
+        """
+        Decorator to provide one or more shutdown
+        handlers.
+        """
+        self.shutdown_handlers.append(func)
+        return func
 
 
     ### Authentication ###

@@ -145,6 +145,16 @@ def hello(request, session, msg, n, debug=False):
     return {"status": msg, 'visit_count': visit_count - 1}
 
 
+@app.startup
+def onstart():
+    logger.info("starting up...")
+
+
+@app.shutdown
+def onstop():
+    logger.info("shutting down...")
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     app.run('0.0.0.0', 8080, debug=True)
