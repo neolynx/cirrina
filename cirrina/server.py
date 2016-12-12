@@ -220,6 +220,7 @@ class Server:
           in: formData
           required: true
           type: string
+          format: password
         produces:
         - text/plain
         responses:
