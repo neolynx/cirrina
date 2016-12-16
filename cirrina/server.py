@@ -59,7 +59,7 @@ class Server:
         self.srv = None
 
         #: Holds all websocket connections.
-        self.websockets = []
+        self.websockets = {}
 
         #: Holds all the websocket callbacks.
         self.on_ws_connect = []
@@ -118,8 +118,8 @@ class Server:
         the aiohttp web application.:
         """
         logger.debug('Stopping cirrina server...')
-        for ws in self.websockets:
-            ws.close()
+        for key in self.websockets.keys():
+            self.websockets[key].close()
         self.app.shutdown()
 
     def run(self, address='127.0.0.1', port=2100, debug=False):
@@ -352,9 +352,8 @@ class Server:
         """
         Broadcast a message to all websocket connections.
         """
-        for websocket in self.websockets:
-            # FIXME: use array
-            websocket.send_str('{"status": 200, "message": %s}'%json.dumps(msg))
+        for key in self.websockets.keys():
+            self.websockets[key].send_str('{"status": 200, "message": %s}'%json.dumps(msg))
 
     def websocket_connect(self, func):
         """
@@ -397,7 +396,7 @@ class Server:
             websocket.close()
             return websocket
 
-        self.websockets.append(websocket)
+        self.websockets[websocket.__hash__()] = websocket
         for func in self.on_ws_connect:
             yield from func(websocket, session)
 
@@ -416,7 +415,7 @@ class Server:
 
             yield from asyncio.sleep(0.1)
 
-        self.websockets.remove(websocket)
+        self.websockets.pop(websocket.__hash__())
         for func in self.on_ws_disconnect:
             yield from func(session)
 
