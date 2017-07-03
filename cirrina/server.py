@@ -4,24 +4,32 @@
 Implementation of server code.
 
 :license: LGPL, see LICENSE for details
+
+TODO:
+
+    Maybe restructure:
+    - WS Management
+    - JSONRPC management
+    - Sessions and auth management
+
+    What about using an external authentication handling library?
+    Pretty sure that should be better covered somewhere.
+
 """
 
+from functools import wraps
+from pathlib import Path
 import asyncio
 import base64
-from functools import wraps
-import json
 import logging
-import os
 
-from cryptography import fernet
 from aiohttp import web, WSMsgType
-from aiohttp_session import setup, get_session, session_middleware
+from aiohttp_jrpc import JError, JResponse, decode, InternalError
+from aiohttp_jrpc import ParseError, InvalidRequest
+from aiohttp_session import setup, get_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from aiohttp_jrpc import JError, JResponse, decode, InvalidParams, InternalError
-from validictory import validate, ValidationError, SchemaError
-from aiohttp._ws_impl import WSMsgType
 from aiohttp_swagger import setup_swagger
-from functools import wraps
+from cryptography.fernet import Fernet
 
 #: Holds the cirrina logger instance
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -29,34 +37,26 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def _session_wrapper(func):
     @wraps(func)
-    def _addsess(request):
-        session = yield from get_session(request)
-        return (yield from func(request, session))
+    async def _addsess(request):
+        return await func(request, await get_session(request))
     return _addsess
 
 
 class Server:
-    """
-    cirrina Server implementation.
-    """
+    """ Cirrina Server implementation.  """
+    # pylint: disable=no-member, too-many-instance-attributes
+    DEFAULT_STATIC_PATH = Path(__file__).parent.absolute() / 'static'
 
-    DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
-
-    def __init__(self, loop=None, login_url="/login", logout_url="/logout"):
-        if loop is None:
-            loop = asyncio.get_event_loop()
+    def __init__(self, loop=None, login_url="/login", logout_url="/logout",
+                 debug=False):
         #: Holds the asyncio event loop which is used to handle requests.
-        self.loop = loop
+        self.loop = loop if loop is not None else asyncio.get_event_loop()
 
         # remember the login/logout urls
-        self.login_url = login_url
-        self.logout_url = logout_url
+        self.urls = {"login": login_url, 'logout': logout_url}
 
-        #: Holds the aiohttp web application instance.
-        self.app = web.Application(loop=self.loop) #, middlewares=[session_middleware])
-
-        #: Holds the asyncio server instance.
-        self.srv = None
+        #: Holds the web application instance.
+        self.app = web.Application(loop=self.loop, debug=debug)
 
         #: Holds all websocket connections.
         self.websockets = []
@@ -70,145 +70,95 @@ class Server:
         self.rpc_methods = {}
 
         # setup cookie encryption for user sessions.
-        fernet_key = fernet.Fernet.generate_key()
-        secret_key = base64.urlsafe_b64decode(fernet_key)
-        setup(self.app, EncryptedCookieStorage(secret_key))
+        setup(self.app, EncryptedCookieStorage(
+            base64.urlsafe_b64decode(Fernet.generate_key())))
 
         #: Holds authentication functions
         self.auth_handlers = []
+
         #: Holds functions which are called upon logout
         self.logout_handlers = []
+
         #: Holds functions which are called on startup
         self.startup_handlers = []
+
         #: Holds functions which are called on shutdown
         self.shutdown_handlers = []
 
+        # In the end I dont like this solution.
+        # But I dont like to repeat the same code over and over again
+        # either.
+        self.startup = self.handler_register(self.startup_handlers)
+        self.shutdown = self.handler_register(self.shutdown_handlers)
+        self.auth_handler = self.handler_register(self.auth_handlers)
+        self.logout_handler = self.handler_register(self.logout_handlers)
+        self.websocket_connect = self.handler_register(self.on_ws_connect)
+        self.websocket_message = self.handler_register(self.on_ws_message)
+        self.websocket_disconnect = self.handler_register(
+            self.on_ws_disconnect)
+
+        self.http_get = self.wrapper('GET')
+        self.http_post = self.wrapper('POST')
+        self.http_head = self.wrapper('HEAD')
+        self.http_put = self.wrapper('PUT')
+        self.http_patch = self.wrapper('PATCH')
+        self.http_delete = self.wrapper('DELETE')
+
         # add default routes to request handler.
-        self.http_post(self.login_url)(self._login)
-        self.http_post(self.logout_url)(self._logout)
+        self.http_post(self.urls['login'])(self._login)
+        self.http_post(self.urls['logout'])(self._logout)
 
-        # swagger documentation
-        self.title = "Cirrina based web application"
-        self.description = """Cirrina is a web application framework using aiohttp.
-                              See https://github.com/neolynx/cirrina."""
-        self.api_version = "0.1"
-        self.contact = "André Roth <neolynx@gmail.com>"
+    def handler_register(self, where):
+        """ Register handlers wrapper """
+        def _register(func):
+            where.append(func)
+            return func
+        return _register
 
+    def wrapper(self, method):
+        """ Return a func wrapper for session management """
+        def _wrapper1(location):
+            def _wrapper(func):
+                self.app.router.add_route(
+                    method, location, _session_wrapper(func))
+                return func
+            return _wrapper
+        return _wrapper1
 
-    @asyncio.coroutine
-    def _start(self, address, port):
-        """
-        Start cirrina server.
-
-        This method starts the asyncio loop server which uses
-        the aiohttp web application.:
-        """
-
-        # setup API documentation
-        setup_swagger(self.app,
-                      description=self.description,
-                      title=self.title,
-                      api_version=self.api_version,
-                      contact=self.contact)
-
-        for handler in self.startup_handlers:
-            handler()
-
-        self.srv = yield from self.loop.create_server(self.app.make_handler(), address, port)
-
-    @asyncio.coroutine
-    def _stop(self):
-        """
-        Stop cirrina server.
-
-        This method stops the asyncio loop server which uses
-        the aiohttp web application.:
-        """
-        logger.debug('Stopping cirrina server...')
-        for handler in self.shutdown_handlers:
-            handler()
-        for ws in self.websockets:
-            ws.close()
-        self.app.shutdown()
-
-    def run(self, address='127.0.0.1', port=2100, debug=False):
+    def run(self, address='127.0.0.1', port=2100, swagger_info=None):
         """
         Run cirrina server event loop.
         """
-        # set cirrina logger loglevel
-        logger.setLevel(logging.DEBUG if debug else logging.INFO)
+        # setup API documentation
+        if swagger_info:
+            setup_swagger(self.app, **swagger_info)
 
-        self.loop.run_until_complete(self._start(address, port))
-        logger.info("Server started at http://%s:%d", address, port)
+        for handler in self.startup_handlers:
+            self.app.on_startup.append(handler)
 
-        try:
-            self.loop.run_forever()
-        except KeyboardInterrupt:
-            pass
+        for handler in self.shutdown_handlers:
+            self.app.on_shutdown.append(handler)
 
-        self.loop.run_until_complete(self._stop())
-        logger.debug("Closing all tasks...")
-        for task in asyncio.Task.all_tasks():
-            task.cancel()
-        self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
-        logger.debug("Closing the loop...")
-        self.loop.close()
+        return web.run_app(self.app, host=address, port=port)
 
-        logger.info('Stopped cirrina server')
-
-
-    def startup(self, func):
-        """
-        Decorator to provide one or more startup
-        handlers.
-        """
-        self.startup_handlers.append(func)
-        return func
-
-
-    def shutdown(self, func):
-        """
-        Decorator to provide one or more shutdown
-        handlers.
-        """
-        self.shutdown_handlers.append(func)
-        return func
-
-
-    ### Authentication ###
-
-    def auth_handler(self, func):
-        """
-        Decorator to provide one or more authentication
-        handlers.
-        """
-        self.auth_handlers.append(func)
-        return func
-
-    def logout_handler(self, func):
-        """
-        Decorator to specify function which should
-        be called upon user logout.
-        """
-        self.logout_handlers.append(func)
-        return func
-
-    @asyncio.coroutine
-    def _login(self, request, session):
-        """
-        Authenticate the user with the given request data.
+    async def _login(self, request, session):
+        """ Authenticate the user with the given request data.
 
         Username and Password a received with the HTTP POST data
         and the ``username`` and ``password`` fields.
         On success a new session will be created.
 
         ---
-        description: This is the login handler
+        description: Login handler
+
         tags:
         - Authentication
+
         consumes:
         - application/x-www-form-urlencoded
+
         parameters:
+
         - name: username
           in: formData
           required: true
@@ -216,160 +166,80 @@ class Server:
           minLength: 8
           maxLength: 64
           type: string
+
         - name: password
           in: formData
           required: true
           type: string
           format: password
+
         produces:
-        - text/plain
+        - text/html
+
         responses:
             "302":
-                description: successful login.
+                description: Login successfull/unsuccessfull
+                             (will be redirected)
             "405":
                 description: invalid HTTP Method
         """
 
         # get username and password from POST request
-        yield from request.post()
-        username = request.POST.get('username')
-        password = request.POST.get('password')
+        ldata = await request.post()
 
-        # check if username and password are valid
-        for auth_handler in self.auth_handlers:
-            if (yield from auth_handler(username, password)) == True:
-                logger.debug('User authenticated: %s', username)
-                session['username'] = username
-                response = web.Response(status=302)
-                response.headers['Location'] = request.POST.get('path', '/')
-                return response
-        logger.debug('User authentication failed: %s', username)
-        response = web.Response(status=302)
-        response.headers['Location'] = self.login_url
+        # check if username and password are valid in any of the auth handlers
+        for auth in self.auth_handlers:
+            if await auth(ldata['username'], ldata['password']):
+                session['username'] = ldata["username"]
+                raise web.HTTPFound(ldata.get('path', '/'))
+
         session.invalidate()
-        return response
+        raise web.HTTPFound(self.login_url)
 
-    @asyncio.coroutine
-    def _logout(self, request, session):
-        """
-        Logout the user which is used in this request session.
+    async def _logout(self, _, session):
+        """ Logout the user which is used in this request session.
 
         If the request is not part of a user session - nothing happens.
 
-        ---
-        description: This is the logout handler
+        description: Logout handler
+
         tags:
         - Authentication
+
         produces:
         - text/plain
+
         responses:
             "200":
                 description: successful logout.
         """
 
         if not session:
-            logger.debug('No valid session in request for logout')
-            return web.Response(status=200)  # FIXME: what should be returned?
+            raise web.HTTPUnauthorized()
 
-        # run all logout handlers before invalidating session
         for func in self.logout_handlers:
-            func(session)
+            await func(session)
 
-        logger.debug('Logout user from session')
         session.invalidate()
         return web.Response(status=200)
 
     def authenticated(self, func):
-        """
-        Decorator to enforce valid session before
-        executing the decorated function.
+        """ Decorator to enforce valid session before
+            executing the decorated function.
         """
         @wraps(func)
-        @asyncio.coroutine
-        def _wrapper(request, session):  # pylint: disable=missing-docstring
+        async def _wrapper(request, session):
             if session.new:
-                response = web.Response(status=302)
-                response.headers['Location'] = self.login_url + "?path=" + request.path_qs
-                return response
-            return (yield from func(request, session))
+                raise web.HTTPFound("{}?path={}".format(
+                    self.urls['login'], request.path_qa))
+            return await func(request, session)
         return _wrapper
 
+    def http_static(self, loc, path):
+        """ Http static path """
+        return self.app.router.add_static(loc, path)
 
-    ### HTTP protocol ###
-
-    def http_static(self, location, path):
-        """
-        Register new route to static path.
-        """
-        self.app.router.add_static(location, path)
-
-
-    def http_get(self, location):
-        """
-        Register HTTP GET route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('GET', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def http_head(self, location):
-        """
-        Register HTTP HEAD route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('HEAD', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def http_options(self, location):
-        """
-        Register HTTP OPTIONS route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('OPTIONS', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def http_post(self, location):
-        """
-        Register HTTP POST route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('POST', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def http_put(self, location):
-        """
-        Register HTTP PUT route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('PUT', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def http_patch(self, location):
-        """
-        Register HTTP PATCH route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('PATCH', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-    def http_delete(self, location):
-        """
-        Register HTTP DELETE route.
-        """
-        def _wrapper(func):
-            self.app.router.add_route('DELETE', location, _session_wrapper(func))
-            return func
-        return _wrapper
-
-
-    ### WebSocket protocol ###
-
+    # WebSocket protocol
     def enable_websockets(self, location):
         """
         Enable websocket communication.
@@ -381,32 +251,9 @@ class Server:
         Broadcast a message to all websocket connections.
         """
         for websocket in self.websockets:
-            # FIXME: use array
-            websocket.send_str('{"status": 200, "message": %s}'%json.dumps(msg))
+            websocket.send_json({"status": 200, "message": msg})
 
-    def websocket_connect(self, func):
-        """
-        Add callback for websocket connect event.
-        """
-        self.on_ws_connect.append(func)
-        return func
-
-    def websocket_message(self, func):
-        """
-        Add callback for websocket message event.
-        """
-        self.on_ws_message.append(func)
-        return func
-
-    def websocket_disconnect(self, func):
-        """
-        Add callback for websocket disconnect event.
-        """
-        self.on_ws_disconnect.append(func)
-        return func
-
-    @asyncio.coroutine
-    def _ws_handler(self, request):
+    async def _ws_handler(self, request):
         """
         Handle websocket connections.
 
@@ -416,42 +263,38 @@ class Server:
             * messages
         """
         websocket = web.WebSocketResponse()
-        yield from websocket.prepare(request)
+        await websocket.prepare(request)
 
-        session = yield from get_session(request)
-        if session.new:
-            logger.debug('websocket: not logged in')
-            websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
+        session = await get_session(request)
+
+        # Allow no-auth if we haven't setup any authentication methods.
+        if session.new and self.auth_handlers:
+            logger.debug('Not logged in websocket attempt')
+            websocket.send_json({'status': 401, 'text': "Unauthorized"})
             websocket.close()
             return websocket
 
         self.websockets.append(websocket)
+
         for func in self.on_ws_connect:
-            yield from func(websocket, session)
+            await func(websocket, session)
 
-        while True:
-            msg = yield from websocket.receive()
-            if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
-                logger.debug('websocket closed')
+        async for msg in websocket:
+            errors = (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED)
+            if msg.type in errors:
+                logger.debug('Websocket closed (%s)', websocket.exception())
                 break
-
-            logger.debug("websocket got: %s", msg)
-            if msg.type == WSMsgType.TEXT:
+            elif msg.type == WSMsgType.TEXT:
                 for func in self.on_ws_message:
-                    yield from func(websocket, session, msg.data)
-            elif msg.type == WSMsgType.ERROR:
-                logger.debug('websocket closed with exception %s', websocket.exception())
+                    await func(websocket, session, msg)
 
-            yield from asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
 
         self.websockets.remove(websocket)
         for func in self.on_ws_disconnect:
-            yield from func(session)
+            await func(session)
 
         return websocket
-
-
-    ### JRPC protocol ###
 
     def enable_rpc(self, location):
         """
@@ -470,44 +313,44 @@ class Server:
         """
         Handle rpc calls.
         """
-        class _rpc(object):
-            cirrina = self
+        async def _run(request):
+            """ Return a coroutine upon object initialization """
+            try:
+                error = None
+                data = await decode(request)
+            except ParseError:
+                error = JError().parse()
+            except InvalidRequest:
+                error = JError().request()
+            except InternalError:
+                error = JError().internal()
+            finally:
+                if error is not None:
+                    # pylint: disable=lost-exception
+                    return error
 
-            def __new__(cls, request):
-                """ Return on call class """
-                return cls.__run(cls, request)
+            # pylint: disable=bare-except
+            try:
+                method = self.cirrina.rpc_methods[data['method']]
+            except:
+                return JError(data).method()
 
-            @asyncio.coroutine
-            def __run(self, request):
-                """ Run service """
-                try:
-                    data = yield from decode(request)
-                except ParseError:
-                    return JError().parse()
-                except InvalidRequest:
-                    return JError().request()
-                except InternalError:
-                    return JError().internal()
+            session = await get_session(request)
 
-                try:
-                    method = _rpc.cirrina.rpc_methods[data['method']]
-                except Exception:
-                    return JError(data).method()
-
-                session = yield from get_session(request)
-                try:
-                    resp = yield from method(request, session, *data['params']['args'], **data['params']['kw'])
-                except TypeError as e:
-                    # workaround for JError.custom bug
-                    return JResponse(jsonrpc={
-                        'id': data['id'],
-                        'error': {'code': -32602, 'message': str(e)},
-                    })
-                except InternalError:
-                    return JError(data).internal()
-
+            try:
+                resp = await method(request, session,
+                                    *data['params']['args'],
+                                    **data['params']['kw'])
+            except TypeError as err:
+                # workaround for JError.custom bug
                 return JResponse(jsonrpc={
-                    "id": data['id'], "result": resp
-                    })
+                    'id': data['id'],
+                    'error': {'code': -32602, 'message': str(err)}})
+            except InternalError:
+                return JError(data).internal()
 
-        return _rpc
+            return JResponse(
+                jsonrpc={"id": data['id'], "result": resp})
+
+        _run.self = self
+        return _run
