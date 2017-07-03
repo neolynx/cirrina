@@ -7,21 +7,19 @@ Implementation of client code.
 """
 
 import aiohttp_jrpc
-import asyncio
 
-class RPCClient(object):
 
+class RPCClient:
+    """ Base JsonRPC Client """
+    # pylint: disable=too-few-public-methods
     def __init__(self, url):
         self.remote = aiohttp_jrpc.Client(url)
 
     def __getattr__(self, attr):
-        @asyncio.coroutine
-        def wrapper(*args, **kw):
-            ret = yield from self.remote.call(attr, {'args': args, 'kw': kw})
-            if ret.error:
-                if ret.error['code'] == -32602:
-                    raise TypeError(ret.error['message'])
+        async def _wrapper(*args, **kw):
+            ret = await self.remote.call(attr, {'args': args, 'kw': kw})
+            if ret.error and ret.error['code'] == -32602:
+                raise TypeError(ret.error['message'])
             return ret.result
 
-        return wrapper
-
+        return _wrapper

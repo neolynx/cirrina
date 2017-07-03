@@ -1,4 +1,4 @@
-<img align="right" src="cirrina.jpg" width="200">
+<img align="right" src="doc/cirrina.jpg" width="200">
 
 # cirrina
 
