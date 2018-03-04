@@ -17,9 +17,9 @@ from cryptography import fernet
 from aiohttp import web, WSMsgType
 from aiohttp_session import setup, get_session, session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from aiohttp_jrpc import JError, JResponse, decode, InvalidParams, InternalError
+from aiohttp_jrpc import JError, JResponse, decode, InvalidParams, InternalError, ParseError
 from validictory import validate, ValidationError, SchemaError
-from aiohttp._ws_impl import WSMsgType
+from aiohttp import WSMsgType
 from aiohttp_swagger import setup_swagger
 from functools import wraps
 
@@ -27,9 +27,9 @@ from functools import wraps
 
 def _session_wrapper(func):
     @wraps(func)
-    def _addsess(request):
-        session = yield from get_session(request)
-        return (yield from func(request, session))
+    async def _addsess(request):
+        session = await get_session(request)
+        return (await func(request, session))
     return _addsess
 
 
@@ -93,8 +93,7 @@ class Server:
         self.contact = "André Roth <neolynx@gmail.com>"
 
 
-    @asyncio.coroutine
-    def _start(self, address, port):
+    async def _start(self, address, port):
         """
         Start cirrina server.
 
@@ -112,7 +111,7 @@ class Server:
         for handler in self.startup_handlers:
             handler()
 
-        self.srv = yield from self.loop.create_server(
+        self.srv = await self.loop.create_server(
             self.app.make_handler(
                 access_log_format='%r %s',
                 access_log=self.logger,
@@ -120,8 +119,7 @@ class Server:
                 address,
                 port)
 
-    @asyncio.coroutine
-    def _stop(self):
+    async def _stop(self):
         """
         Stop cirrina server.
 
@@ -202,8 +200,7 @@ class Server:
         self.logout_handlers.append(func)
         return func
 
-    @asyncio.coroutine
-    def _login(self, request, session):
+    async def _login(self, request, session):
         """
         Authenticate the user with the given request data.
 
@@ -240,17 +237,17 @@ class Server:
         """
 
         # get username and password from POST request
-        yield from request.post()
-        username = request.POST.get('username')
-        password = request.POST.get('password')
+        data = await request.post()
+        username = data.get('username')
+        password = data.get('password')
 
         # check if username and password are valid
         for auth_handler in self.auth_handlers:
-            if (yield from auth_handler(username, password)) == True:
-                self.logger.debug('User authenticated: %s', username)
+            if (await auth_handler(username, password)) == True:
+                logger.debug('User authenticated: %s', username)
                 session['username'] = username
                 response = web.Response(status=302)
-                response.headers['Location'] = request.POST.get('path', '/')
+                response.headers['Location'] = data.get('path', '/')
                 return response
         self.logger.debug('User authentication failed: %s', username)
         response = web.Response(status=302)
@@ -258,8 +255,7 @@ class Server:
         session.invalidate()
         return response
 
-    @asyncio.coroutine
-    def _logout(self, request, session):
+    async def _logout(self, request, session):
         """
         Logout the user which is used in this request session.
 
@@ -294,13 +290,12 @@ class Server:
         executing the decorated function.
         """
         @wraps(func)
-        @asyncio.coroutine
-        def _wrapper(request, session):  # pylint: disable=missing-docstring
+        async def _wrapper(request, session):  # pylint: disable=missing-docstring
             if session.new:
                 response = web.Response(status=302)
                 response.headers['Location'] = self.login_url + "?path=" + request.path_qs
                 return response
-            return (yield from func(request, session))
+            return (await func(request, session))
         return _wrapper
 
 
@@ -414,8 +409,7 @@ class Server:
         self.on_ws_disconnect.append(func)
         return func
 
-    @asyncio.coroutine
-    def _ws_handler(self, request):
+    async def _ws_handler(self, request):
         """
         Handle websocket connections.
 
@@ -425,9 +419,9 @@ class Server:
             * messages
         """
         websocket = web.WebSocketResponse()
-        yield from websocket.prepare(request)
+        await websocket.prepare(request)
 
-        session = yield from get_session(request)
+        session = await get_session(request)
         if session.new:
             self.logger.debug('websocket: not logged in')
             websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
@@ -436,10 +430,10 @@ class Server:
 
         self.websockets.append(websocket)
         for func in self.on_ws_connect:
-            yield from func(websocket, session)
+            await func(websocket, session)
 
         while True:
-            msg = yield from websocket.receive()
+            msg = await websocket.receive()
             if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
                 self.logger.debug('websocket closed')
                 break
@@ -447,15 +441,15 @@ class Server:
             self.logger.debug("websocket got: %s", msg)
             if msg.type == WSMsgType.TEXT:
                 for func in self.on_ws_message:
-                    yield from func(websocket, session, msg.data)
+                    await func(websocket, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
                 self.logger.debug('websocket closed with exception %s', websocket.exception())
 
-            yield from asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
 
         self.websockets.remove(websocket)
         for func in self.on_ws_disconnect:
-            yield from func(session)
+            await func(session)
 
         return websocket
 
@@ -486,12 +480,11 @@ class Server:
                 """ Return on call class """
                 return cls.__run(cls, request)
 
-            @asyncio.coroutine
-            def __run(self, request):
+            async def __run(self, request):
                 """ Run service """
                 _rpc.cirrina.logger.debug("RPC call")
                 try:
-                    data = yield from decode(request)
+                    data = await decode(request)
                 except ParseError:
                     _rpc.cirrina.logger.error('JRPC parse error')
                     return JError().parse()
@@ -508,9 +501,9 @@ class Server:
                     _rpc.cirrina.logger.error("JRPC method not found: '%s'"%data['method'])
                     return JError(data).method()
 
-                session = yield from get_session(request)
+                session = await get_session(request)
                 try:
-                    resp = yield from method(request, session, *data['params']['args'], **data['params']['kw'])
+                    resp = await method(request, session, *data['params']['args'], **data['params']['kw'])
                 except TypeError as e:
                     # workaround for JError.custom bug
                     _rpc.cirrina.logger.error('JRPC argument type error')

@@ -15,9 +15,8 @@ class RPCClient(object):
         self.remote = aiohttp_jrpc.Client(url)
 
     def __getattr__(self, attr):
-        @asyncio.coroutine
-        def wrapper(*args, **kw):
-            ret = yield from self.remote.call(attr, {'args': args, 'kw': kw})
+        async def wrapper(*args, **kw):
+            ret = await self.remote.call(attr, {'args': args, 'kw': kw})
             if ret.error:
                 if ret.error['code'] == -32602:
                     raise TypeError(ret.error['message'])

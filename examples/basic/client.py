@@ -8,9 +8,8 @@ remote = RPCClient('http://localhost:8080/jrpc')
 sys.stdout.write("Send: ")
 msg = input().strip()
 
-@asyncio.coroutine
-def rpc_call(msg):
-  ret = yield from remote.hello(msg, 7, debug=True)
+async def rpc_call(msg):
+  ret = await remote.hello(msg, 7, debug=True)
   return ret
 
 loop = asyncio.get_event_loop()

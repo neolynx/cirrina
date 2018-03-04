@@ -41,34 +41,29 @@ app.enable_websockets(wspath)
 app.enable_rpc('/jrpc')
 
 @app.auth_handler
-@asyncio.coroutine
-def auth_handler(username, password):
+async def auth_handler(username, password):
     if username == 'admin' and password == 'admin':
         return True
     return False
 
 @app.websocket_connect
-@asyncio.coroutine
-def websocket_connected(ws, session):
+async def websocket_connected(ws, session):
     logger.info("websocket: new authenticated connection, user: %s", session['username'])
 
 
 @app.websocket_message
-@asyncio.coroutine
-def websocket_message(ws, session, msg):
+async def websocket_message(ws, session, msg):
     logger.info("websocket: got message: %s", msg)
     app.websocket_broadcast(msg)
 
 
 @app.websocket_disconnect
-@asyncio.coroutine
-def websocket_closed(session):
+async def websocket_closed(session):
     logger.info('websocket connection closed')
 
 
 @app.http_get('/login')
-@asyncio.coroutine
-def _login(request, session):
+async def _login(request, session):
     """
     Send login page to client.
     """
@@ -76,8 +71,7 @@ def _login(request, session):
 
 @app.http_get('/')
 @app.authenticated
-@asyncio.coroutine
-def default(request, session):
+async def default(request, session):
     """
     ---
     description: This is the default page
@@ -136,8 +130,7 @@ def default(request, session):
 
 
 @app.jrpc
-@asyncio.coroutine
-def hello(request, session, msg, n, debug=False):
+async def hello(request, session, msg, n, debug=False):
     logger.info("jrpc hello called: %s - %d, debug: %d", msg, n, debug)
     visit_count = session['visit_count'] if 'visit_count' in session else 1
     session['visit_count'] = visit_count + 1
