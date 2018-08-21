@@ -371,6 +371,33 @@ class Server:
             return func
         return _wrapper
 
+    def http_upload(self, location, upload_dir="/tmp/cirrina-upload"):
+        """
+        Register HTTP POST route for file uploads.
+        """
+        def _wrapper(func):
+            async def upload_handler(request, session):
+                reader = await request.multipart()
+                async for part in reader:
+                    if part.name == "file":
+                        filename = part.filename
+                        logger.info("file upload: %s", filename)
+                        size = 0
+                        # FIXME: do not overwrite
+                        # ensure dir exists
+                        # do not allow ../
+                        with open(os.path.join(upload_dir, filename), 'wb') as f:
+                            while True:
+                                chunk = await part.read_chunk()  # 8192 bytes by default.
+                                if not chunk:
+                                    break
+                                size += len(chunk)
+                                f.write(chunk)
+                        return await func(request, session, upload_dir, filename, size)
+            self.app.router.add_route('POST', location, _session_wrapper(upload_handler))
+            return upload_handler
+        return _wrapper
+
 
     ### WebSocket protocol ###
 

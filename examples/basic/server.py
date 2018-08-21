@@ -122,6 +122,12 @@ async def default(request, session):
  <input type="text" id="text">
  <input type='button' value='Send' onclick="cirrina.send(document.getElementById('text').value);">
  visit count: %d <br/>
+ <br/>
+ <form id="upload" action="/upload" method="post" accept-charset="utf-8" enctype="multipart/form-data">
+    <label for="file">File Upload</label>
+    <input id="file" name="file" type="file" value="" />
+    <input type="button" value="submit" onclick="form.submit();"/>
+ </form>
 </body>
 </html>
 '''%(wspath, visit_count)
@@ -147,6 +153,9 @@ def onstart():
 def onstop():
     logger.info("shutting down...")
 
+@app.http_upload('/upload', upload_dir="upload/")
+async def file_upload(request, session, upload_die, filename, size):
+    return web.Response(text='file uploaded: {} ({} bytes)'.format(filename, size))
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
