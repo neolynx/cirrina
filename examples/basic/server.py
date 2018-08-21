@@ -67,7 +67,7 @@ async def _login(request, session):
     """
     Send login page to client.
     """
-    return web.Response(text=LOGIN_HTML.format(request.GET.get('path', "/")), content_type="text/html")
+    return web.Response(text=LOGIN_HTML.format(request.get('path', "/")), content_type="text/html")
 
 @app.http_get('/')
 @app.authenticated
