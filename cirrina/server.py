@@ -23,8 +23,6 @@ from aiohttp._ws_impl import WSMsgType
 from aiohttp_swagger import setup_swagger
 from functools import wraps
 
-#: Holds the cirrina logger instance
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def _session_wrapper(func):
@@ -114,7 +112,13 @@ class Server:
         for handler in self.startup_handlers:
             handler()
 
-        self.srv = yield from self.loop.create_server(self.app.make_handler(), address, port)
+        self.srv = yield from self.loop.create_server(
+            self.app.make_handler(
+                access_log_format='%r %s',
+                access_log=self.logger,
+                logger=self.logger),
+                address,
+                port)
 
     @asyncio.coroutine
     def _stop(self):
@@ -131,15 +135,20 @@ class Server:
             ws.close()
         self.app.shutdown()
 
-    def run(self, address='127.0.0.1', port=2100, debug=False):
+    def run(self, address='127.0.0.1', port=2100, logger=None, debug=False):
         """
         Run cirrina server event loop.
         """
+        if not logger:
+            self.logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+        else:
+            self.logger = logger
+
         # set cirrina logger loglevel
-        logger.setLevel(logging.DEBUG if debug else logging.INFO)
+        self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
 
         self.loop.run_until_complete(self._start(address, port))
-        logger.info("Server started at http://%s:%d", address, port)
+        self.logger.info("Server started at http://%s:%d", address, port)
 
         try:
             self.loop.run_forever()
@@ -147,14 +156,14 @@ class Server:
             pass
 
         self.loop.run_until_complete(self._stop())
-        logger.debug("Closing all tasks...")
+        self.logger.debug("Closing all tasks...")
         for task in asyncio.Task.all_tasks():
             task.cancel()
         self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
-        logger.debug("Closing the loop...")
+        self.logger.debug("Closing the loop...")
         self.loop.close()
 
-        logger.info('Stopped cirrina server')
+        self.logger.info('Stopped cirrina server')
 
 
     def startup(self, func):
@@ -238,12 +247,12 @@ class Server:
         # check if username and password are valid
         for auth_handler in self.auth_handlers:
             if (yield from auth_handler(username, password)) == True:
-                logger.debug('User authenticated: %s', username)
+                self.logger.debug('User authenticated: %s', username)
                 session['username'] = username
                 response = web.Response(status=302)
                 response.headers['Location'] = request.POST.get('path', '/')
                 return response
-        logger.debug('User authentication failed: %s', username)
+        self.logger.debug('User authentication failed: %s', username)
         response = web.Response(status=302)
         response.headers['Location'] = self.login_url
         session.invalidate()
@@ -268,14 +277,14 @@ class Server:
         """
 
         if not session:
-            logger.debug('No valid session in request for logout')
+            self.logger.debug('No valid session in request for logout')
             return web.Response(status=200)  # FIXME: what should be returned?
 
         # run all logout handlers before invalidating session
         for func in self.logout_handlers:
             func(session)
 
-        logger.debug('Logout user from session')
+        self.logger.debug('Logout user from session')
         session.invalidate()
         return web.Response(status=200)
 
@@ -420,7 +429,7 @@ class Server:
 
         session = yield from get_session(request)
         if session.new:
-            logger.debug('websocket: not logged in')
+            self.logger.debug('websocket: not logged in')
             websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
             websocket.close()
             return websocket
@@ -432,15 +441,15 @@ class Server:
         while True:
             msg = yield from websocket.receive()
             if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
-                logger.debug('websocket closed')
+                self.logger.debug('websocket closed')
                 break
 
-            logger.debug("websocket got: %s", msg)
+            self.logger.debug("websocket got: %s", msg)
             if msg.type == WSMsgType.TEXT:
                 for func in self.on_ws_message:
                     yield from func(websocket, session, msg.data)
             elif msg.type == WSMsgType.ERROR:
-                logger.debug('websocket closed with exception %s', websocket.exception())
+                self.logger.debug('websocket closed with exception %s', websocket.exception())
 
             yield from asyncio.sleep(0.1)
 
