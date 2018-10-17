@@ -128,7 +128,7 @@ class Server:
         This method stops the asyncio loop server which uses
         the aiohttp web application.:
         """
-        logger.debug('Stopping cirrina server...')
+        self.logger.debug('Stopping cirrina server...')
         for handler in self.shutdown_handlers:
             handler()
         for ws in self.websockets:
@@ -489,18 +489,23 @@ class Server:
             @asyncio.coroutine
             def __run(self, request):
                 """ Run service """
+                _rpc.cirrina.logger.debug("RPC call")
                 try:
                     data = yield from decode(request)
                 except ParseError:
+                    _rpc.cirrina.logger.error('JRPC parse error')
                     return JError().parse()
                 except InvalidRequest:
+                    _rpc.cirrina.logger.error('JRPC invalid request')
                     return JError().request()
                 except InternalError:
+                    _rpc.cirrina.logger.error('JRPC internal error')
                     return JError().internal()
 
                 try:
                     method = _rpc.cirrina.rpc_methods[data['method']]
                 except Exception:
+                    _rpc.cirrina.logger.error("JRPC method not found: '%s'"%data['method'])
                     return JError(data).method()
 
                 session = yield from get_session(request)
@@ -508,11 +513,13 @@ class Server:
                     resp = yield from method(request, session, *data['params']['args'], **data['params']['kw'])
                 except TypeError as e:
                     # workaround for JError.custom bug
+                    _rpc.cirrina.logger.error('JRPC argument type error')
                     return JResponse(jsonrpc={
                         'id': data['id'],
                         'error': {'code': -32602, 'message': str(e)},
                     })
                 except InternalError:
+                    _rpc.cirrina.logger.error('JRPC internal error')
                     return JError(data).internal()
 
                 return JResponse(jsonrpc={
