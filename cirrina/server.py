@@ -24,14 +24,14 @@ from aiohttp_swagger import setup_swagger
 from functools import wraps
 
 
+class CirrinaContext:
 
-def _session_wrapper(func):
-    @wraps(func)
-    async def _addsess(request):
-        session = await get_session(request)
-        return (await func(request, session))
-    return _addsess
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
+    def add_context(self, key, value):
+        setattr(self, key, value)
 
 class Server:
     """
@@ -81,9 +81,14 @@ class Server:
         #: Holds functions which are called on shutdown
         self.shutdown_handlers = []
 
+        self.create_context_func = None
+        self.destroy_context_func = None
+
         # add default routes to request handler.
         self.http_post(self.login_url)(self._login)
         self.http_post(self.logout_url)(self._logout)
+
+        self.logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
         # swagger documentation
         self.title = "Cirrina based web application"
@@ -92,6 +97,9 @@ class Server:
         self.api_version = "0.1"
         self.contact = "André Roth <neolynx@gmail.com>"
 
+    def set_context_functions(self, create_context_func, destroy_context_func = None):
+        self.create_context_func = create_context_func
+        self.destroy_context_func = destroy_context_func
 
     async def _start(self, address, port):
         """
@@ -109,7 +117,10 @@ class Server:
                       contact=self.contact)
 
         for handler in self.startup_handlers:
-            handler()
+            try:
+                handler()
+            except Exception as exc:
+                self.logger.exception(exc)
 
         self.srv = await self.loop.create_server(
             self.app.make_handler(
@@ -128,7 +139,10 @@ class Server:
         """
         self.logger.debug('Stopping cirrina server...')
         for handler in self.shutdown_handlers:
-            handler()
+            try:
+                handler()
+            except Exception as exc:
+                self.logger.exception(exc)
         for ws in self.websockets:
             ws.close()
         self.app.shutdown()
@@ -137,9 +151,7 @@ class Server:
         """
         Run cirrina server event loop.
         """
-        if not logger:
-            self.logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-        else:
+        if logger:
             self.logger = logger
 
         # set cirrina logger loglevel
@@ -200,7 +212,7 @@ class Server:
         self.logout_handlers.append(func)
         return func
 
-    async def _login(self, request, session):
+    async def _login(self, request):
         """
         Authenticate the user with the given request data.
 
@@ -243,19 +255,19 @@ class Server:
 
         # check if username and password are valid
         for auth_handler in self.auth_handlers:
-            if (await auth_handler(username, password)) == True:
-                logger.debug('User authenticated: %s', username)
-                session['username'] = username
+            if (await auth_handler(request, username, password)) == True:
+                self.logger.debug('User authenticated: %s', username)
+                request.cirrina.web_session['username'] = username
                 response = web.Response(status=302)
                 response.headers['Location'] = data.get('path', '/')
                 return response
         self.logger.debug('User authentication failed: %s', username)
         response = web.Response(status=302)
         response.headers['Location'] = self.login_url
-        session.invalidate()
+        request.cirrina.web_session.invalidate()
         return response
 
-    async def _logout(self, request, session):
+    async def _logout(self, request):
         """
         Logout the user which is used in this request session.
 
@@ -272,16 +284,16 @@ class Server:
                 description: successful logout.
         """
 
-        if not session:
+        if not request.cirrina.web_session:
             self.logger.debug('No valid session in request for logout')
             return web.Response(status=200)  # FIXME: what should be returned?
 
         # run all logout handlers before invalidating session
         for func in self.logout_handlers:
-            func(session)
+            func(request)
 
         self.logger.debug('Logout user from session')
-        session.invalidate()
+        request.cirrina.web_session.invalidate()
         return web.Response(status=200)
 
     def authenticated(self, func):
@@ -290,16 +302,29 @@ class Server:
         executing the decorated function.
         """
         @wraps(func)
-        async def _wrapper(request, session):  # pylint: disable=missing-docstring
-            if session.new:
+        async def _wrapper(request):  # pylint: disable=missing-docstring
+            if request.cirrina.web_session.new:
                 response = web.Response(status=302)
                 response.headers['Location'] = self.login_url + "?path=" + request.path_qs
                 return response
-            return (await func(request, session))
+            return (await func(request))
         return _wrapper
 
 
     ### HTTP protocol ###
+
+    def _session_wrapper(self, func):
+        @wraps(func)
+        async def _wrap(request):
+            session = await get_session(request)
+            request.cirrina = CirrinaContext(web_session = session)
+            if self.create_context_func:
+                self.create_context_func(request.cirrina)
+            ret = (await func(request))
+            if self.destroy_context_func:
+                self.destroy_context_func(request.cirrina)
+            return ret
+        return _wrap
 
     def http_static(self, location, path):
         """
@@ -313,7 +338,7 @@ class Server:
         Register HTTP GET route.
         """
         def _wrapper(func):
-            self.app.router.add_route('GET', location, _session_wrapper(func))
+            self.app.router.add_route('GET', location, self._session_wrapper(func))
             return func
         return _wrapper
 
@@ -322,7 +347,7 @@ class Server:
         Register HTTP HEAD route.
         """
         def _wrapper(func):
-            self.app.router.add_route('HEAD', location, _session_wrapper(func))
+            self.app.router.add_route('HEAD', location, self._session_wrapper(func))
             return func
         return _wrapper
 
@@ -331,7 +356,7 @@ class Server:
         Register HTTP OPTIONS route.
         """
         def _wrapper(func):
-            self.app.router.add_route('OPTIONS', location, _session_wrapper(func))
+            self.app.router.add_route('OPTIONS', location, self._session_wrapper(func))
             return func
         return _wrapper
 
@@ -340,7 +365,7 @@ class Server:
         Register HTTP POST route.
         """
         def _wrapper(func):
-            self.app.router.add_route('POST', location, _session_wrapper(func))
+            self.app.router.add_route('POST', location, self._session_wrapper(func))
             return func
         return _wrapper
 
@@ -349,7 +374,7 @@ class Server:
         Register HTTP PUT route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PUT', location, _session_wrapper(func))
+            self.app.router.add_route('PUT', location, self._session_wrapper(func))
             return func
         return _wrapper
 
@@ -358,7 +383,7 @@ class Server:
         Register HTTP PATCH route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PATCH', location, _session_wrapper(func))
+            self.app.router.add_route('PATCH', location, self._session_wrapper(func))
             return func
         return _wrapper
 
@@ -367,7 +392,7 @@ class Server:
         Register HTTP DELETE route.
         """
         def _wrapper(func):
-            self.app.router.add_route('DELETE', location, _session_wrapper(func))
+            self.app.router.add_route('DELETE', location, self._session_wrapper(func))
             return func
         return _wrapper
 
@@ -394,7 +419,7 @@ class Server:
                                 size += len(chunk)
                                 f.write(chunk)
                         return await func(request, session, upload_dir, filename, size)
-            self.app.router.add_route('POST', location, _session_wrapper(upload_handler))
+            self.app.router.add_route('POST', location, self._session_wrapper(upload_handler))
             return upload_handler
         return _wrapper
 
@@ -460,19 +485,20 @@ class Server:
             await func(websocket, session)
 
         while True:
-            msg = await websocket.receive()
-            if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
-                self.logger.debug('websocket closed')
-                break
+            try:
+                msg = await websocket.receive()
+                if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
+                    self.logger.info('websocket closed')
+                    break
 
-            self.logger.debug("websocket got: %s", msg)
-            if msg.type == WSMsgType.TEXT:
-                for func in self.on_ws_message:
-                    await func(websocket, session, msg.data)
-            elif msg.type == WSMsgType.ERROR:
-                self.logger.debug('websocket closed with exception %s', websocket.exception())
-
-            await asyncio.sleep(0.1)
+                self.logger.debug("websocket got: %s", msg)
+                if msg.type == WSMsgType.TEXT:
+                    for func in self.on_ws_message:
+                        await func(websocket, session, msg.data)
+                elif msg.type == WSMsgType.ERROR:
+                    self.logger.info('websocket closed with exception %s', websocket.exception())
+            except Exception as exc:
+                self.logger.exception(exc)
 
         self.websockets.remove(websocket)
         for func in self.on_ws_disconnect:
