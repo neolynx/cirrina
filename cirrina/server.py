@@ -12,6 +12,7 @@ from functools import wraps
 import json
 import logging
 import os
+from tempfile import NamedTemporaryFile
 
 from cryptography import fernet
 from aiohttp import web, WSMsgType
@@ -396,29 +397,52 @@ class Server:
             return func
         return _wrapper
 
-    def http_upload(self, location, upload_dir="/tmp/cirrina-upload"):
+    def http_upload(self, location, field="file", upload_dir="/tmp/cirrina-upload"):
         """
         Register HTTP POST route for file uploads.
         """
         def _wrapper(func):
-            async def upload_handler(request, session):
+            async def upload_handler(request):
                 reader = await request.multipart()
                 async for part in reader:
-                    if part.name == "file":
+                    filename = None
+                    if not hasattr(part, field):
+                        content = part.headers["Content-Disposition"].split("; ")
+                        for c in content:
+                            p = c.split("=")
+                            if len(p) != 2:
+                                continue
+                            k, v = p
+                            if k == "name":
+                                received_field = v
+                            elif k == "filename":
+                                received_filename = v
+                        if received_field == "\"%s\""%field:
+                            filename = received_filename.replace("\"", "")
+
+                    elif getattr(part, field) == "file":
                         filename = part.filename
-                        logger.info("file upload: %s", filename)
-                        size = 0
-                        # FIXME: do not overwrite
-                        # ensure dir exists
-                        # do not allow ../
-                        with open(os.path.join(upload_dir, filename), 'wb') as f:
-                            while True:
-                                chunk = await part.read_chunk()  # 8192 bytes by default.
-                                if not chunk:
-                                    break
-                                size += len(chunk)
-                                f.write(chunk)
-                        return await func(request, session, upload_dir, filename, size)
+
+                    if not filename:
+                        continue
+
+                    filename = filename.replace("/", "") # no paths separators allowed
+
+                    self.logger.info("http_upload: receiving file: '%s'", filename)
+                    size = 0
+                    # ensure dir exists
+                    tempfile = None
+                    with NamedTemporaryFile(dir=upload_dir, prefix=filename + ".", delete=False) as f:
+                        tempfile = f.name
+                        while True:
+                            chunk = await part.read_chunk()  # 8192 bytes by default.
+                            if not chunk:
+                                break
+                            size += len(chunk)
+                            f.write(chunk)
+                    return await func(request, tempfile, filename, size)
+                self.logger.error("http_upload: multipart field '%s' not found", field)
+
             self.app.router.add_route('POST', location, self._session_wrapper(upload_handler))
             return upload_handler
         return _wrapper
