@@ -8,23 +8,18 @@ Implementation of server code.
 
 import asyncio
 import base64
-from functools import wraps
 import json
 import logging
 import os
-from tempfile import NamedTemporaryFile
-
-from cryptography import fernet
 from aiohttp import web, WSMsgType
-from aiohttp_session import setup, get_session, session_middleware
+from aiohttp_session import setup, get_session  # , session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from aiohttp_jrpc import JError, JResponse, decode, InvalidParams, InternalError, ParseError
-from validictory import validate, ValidationError, SchemaError
-from aiohttp import WSMsgType
+from aiohttp_jrpc import JError, JResponse, decode, InternalError, ParseError
 from aiohttp_swagger import setup_swagger
 from collections import Callable
 from cryptography import fernet
 from functools import wraps
+from tempfile import NamedTemporaryFile
 
 
 class CirrinaContext:
@@ -61,7 +56,7 @@ class Server:
         self.logout_url = logout_url
 
         #: Holds the aiohttp web application instance.
-        self.app = web.Application(loop=self.loop) #, middlewares=[session_middleware])
+        self.app = web.Application(loop=self.loop)  #, middlewares=[session_middleware])
 
         #: Holds the asyncio server instance.
         self.srv = None
@@ -102,7 +97,7 @@ class Server:
         self.api_version = "0.1"
         self.contact = "André Roth <neolynx@gmail.com>"
 
-    def set_context_functions(self, create_context_func, destroy_context_func = None):
+    def set_context_functions(self, create_context_func, destroy_context_func=None):
         self.create_context_func = create_context_func
         self.destroy_context_func = destroy_context_func
 
@@ -261,7 +256,7 @@ class Server:
 
         # check if username and password are valid
         for auth_handler in self.auth_handlers:
-            if (await auth_handler(request, username, password)) == True:
+            if (await auth_handler(request, username, password)) is True:
                 self.logger.debug('User authenticated: %s', username)
                 request.cirrina.web_session['username'] = username
                 response = web.Response(status=302)
@@ -317,13 +312,13 @@ class Server:
         return _wrapper
 
 
-    ### HTTP protocol ###
+    # HTTP protocol
 
     def _session_wrapper(self, func):
         @wraps(func)
         async def _wrap(request):
             session = await get_session(request)
-            request.cirrina = CirrinaContext(web_session = session)
+            request.cirrina = CirrinaContext(web_session=session)
             if self.create_context_func:
                 self.create_context_func(request.cirrina)
             ret = (await func(request))
@@ -337,7 +332,6 @@ class Server:
         Register new route to static path.
         """
         self.app.router.add_static(location, path)
-
 
     def http_get(self, location):
         """
@@ -422,7 +416,7 @@ class Server:
                                 received_field = v
                             elif k == "filename":
                                 received_filename = v
-                        if received_field == "\"%s\""%field:
+                        if received_field == "\"%s\"" % field:
                             filename = received_filename.replace("\"", "")
 
                     elif getattr(part, field) == "file":
@@ -431,7 +425,7 @@ class Server:
                     if not filename:
                         continue
 
-                    filename = filename.replace("/", "") # no paths separators allowed
+                    filename = filename.replace("/", "")  # no paths separators allowed
 
                     self.logger.info("http_upload: receiving file: '%s'", filename)
                     size = 0
@@ -580,8 +574,7 @@ class Server:
 
         return websocket
 
-
-    ### JRPC protocol ###
+    # JRPC protocol
 
     def enable_rpc(self, location):
         """
