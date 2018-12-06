@@ -22,6 +22,8 @@ from aiohttp_jrpc import JError, JResponse, decode, InvalidParams, InternalError
 from validictory import validate, ValidationError, SchemaError
 from aiohttp import WSMsgType
 from aiohttp_swagger import setup_swagger
+from collections import Callable
+from cryptography import fernet
 from functools import wraps
 
 
@@ -33,6 +35,13 @@ class CirrinaContext:
 
     def add_context(self, key, value):
         setattr(self, key, value)
+
+
+class CirrinaWSContext():
+    def __init__(self, request, session):
+        self.request = request
+        self.web_session = session
+
 
 class Server:
     """
@@ -57,13 +66,8 @@ class Server:
         #: Holds the asyncio server instance.
         self.srv = None
 
-        #: Holds all websocket connections.
-        self.websockets = []
-
-        #: Holds all the websocket callbacks.
-        self.on_ws_connect = []
-        self.on_ws_message = []
-        self.on_ws_disconnect = []
+        #: Holds all websocket handler information.
+        self.websockets = {}
 
         #: Holds all registered RPC methods.
         self.rpc_methods = {}
@@ -144,8 +148,9 @@ class Server:
                 handler()
             except Exception as exc:
                 self.logger.exception(exc)
-        for ws in self.websockets:
-            ws.close()
+        for ws_group in self.websockets:
+            for ws in self.websockets[ws_group]:
+                ws.close()
         self.app.shutdown()
 
     def run(self, address='127.0.0.1', port=2100, logger=None, debug=False):
@@ -448,44 +453,81 @@ class Server:
         return _wrapper
 
 
-    ### WebSocket protocol ###
+    # WebSocket protocol
 
-    def enable_websockets(self, location):
-        """
-        Enable websocket communication.
-        """
-        self.app.router.add_route('GET', location, self._ws_handler)
-
-    def websocket_broadcast(self, msg):
+    def websocket_broadcast(self, msg, group="main"):
         """
         Broadcast a message to all websocket connections.
         """
-        for websocket in self.websockets:
-            # FIXME: use array
-            websocket.send_str('{"status": 200, "message": %s}'%json.dumps(msg))
+        if group not in self.websockets:
+            raise Exception("Websocket group '%s' not found" % group)
 
-    def websocket_connect(self, func):
-        """
-        Add callback for websocket connect event.
-        """
-        self.on_ws_connect.append(func)
-        return func
+        for ws in self.websockets[group]:
+            # FIXME: use array ?
+            ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
 
-    def websocket_message(self, func):
+    def websocket_message(self, location, group="main", authenticated=True):
         """
-        Add callback for websocket message event.
+        Decorator for websocket message events.
         """
-        self.on_ws_message.append(func)
-        return func
+        def _ws_wrapper(request):
+            return self._ws_handler(request, group)
 
-    def websocket_disconnect(self, func):
-        """
-        Add callback for websocket disconnect event.
-        """
-        self.on_ws_disconnect.append(func)
-        return func
+        def _wrapper(func):
+            self.app.router.add_route('GET', location, _ws_wrapper)
+            if group not in self.websockets:
+                self.websockets[group] = {}
+            if "message" in self.websockets[group]:
+                raise Exception("Websocket message handler already defined in group '%s'" % group)
+            self.websockets[group]["handler"] = func
+            self.websockets[group]["authenticated"] = authenticated
+            self.websockets[group]["connections"] = []
+            return func
+        return _wrapper
 
-    async def _ws_handler(self, request):
+    def websocket_connect(self, group="main"):
+        """
+        Decorator for websocket connect events.
+        """
+        if isinstance(group, Callable):
+            raise Exception("Websocket connect decorator needs paranthesis: websocket_connect()")
+
+        if group not in self.websockets:
+            self.websockets[group] = {}
+        if "connect" in self.websockets[group]:
+            raise Exception("Websocket connect handler already defined in group '%s'" % group)
+
+        def _decorator(func):
+            self.websockets[group]["connect"] = func
+
+            @wraps(func)
+            def _wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            return _wrapper
+        return _decorator
+
+    def websocket_disconnect(self, group="main"):
+        """
+        Decorator for websocket disconnect events.
+        """
+        if isinstance(group, Callable):
+            raise Exception("Websocket disconnect decorator needs paranthesis: websocket_disconnect()")
+
+        if group not in self.websockets:
+            self.websockets[group] = {}
+        if "disconnect" in self.websockets[group]:
+            raise Exception("Websocket disconnect handler already defined in group '%s'" % group)
+
+        def _decorator(func):
+            self.websockets[group]["disconnect"] = func
+
+            @wraps(func)
+            def _wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            return _wrapper
+        return _decorator
+
+    async def _ws_handler(self, request, group):
         """
         Handle websocket connections.
 
@@ -497,16 +539,22 @@ class Server:
         websocket = web.WebSocketResponse()
         await websocket.prepare(request)
 
-        session = await get_session(request)
-        if session.new:
-            self.logger.debug('websocket: not logged in')
-            websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
-            websocket.close()
-            return websocket
+        session = None
+        if self.websockets[group]["authenticated"]:
+            session = await get_session(request)
+            if session.new:
+                self.logger.debug('websocket: not logged in')
+                websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
+                websocket.close()
+                return websocket
 
-        self.websockets.append(websocket)
-        for func in self.on_ws_connect:
-            await func(websocket, session)
+        websocket.cirrina = CirrinaWSContext(request, session)
+        self.websockets[group]["connections"].append(websocket)
+        try:
+            await self.websockets[group]["connect"](websocket)
+        except Exception as exc:
+            self.logger.error("websocket: error in connect event handler")
+            self.logger.exception(exc)
 
         while True:
             try:
@@ -517,16 +565,18 @@ class Server:
 
                 self.logger.debug("websocket got: %s", msg)
                 if msg.type == WSMsgType.TEXT:
-                    for func in self.on_ws_message:
-                        await func(websocket, session, msg.data)
+                    await self.websockets[group]["handler"](websocket, msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     self.logger.info('websocket closed with exception %s', websocket.exception())
             except Exception as exc:
                 self.logger.exception(exc)
 
-        self.websockets.remove(websocket)
-        for func in self.on_ws_disconnect:
-            await func(session)
+        self.websockets[group]["connections"].remove(websocket)
+        try:
+            await self.websockets[group]["disconnect"](websocket)
+        except Exception as exc:
+            self.logger.error("websocket: error in disconnect event handler")
+            self.logger.exception(exc)
 
         return websocket
 
