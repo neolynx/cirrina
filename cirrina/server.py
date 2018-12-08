@@ -533,49 +533,49 @@ class Server:
             * closed connections
             * messages
         """
-        websocket = web.WebSocketResponse()
-        await websocket.prepare(request)
+        ws_client = web.WebSocketResponse()
+        await ws_client.prepare(request)
 
         session = None
         if self.websockets[group]["authenticated"]:
             session = await get_session(request)
             if session.new:
                 self.logger.debug('websocket: not logged in')
-                websocket.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
-                websocket.close()
-                return websocket
+                ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
+                ws_client.close()
+                return ws_client
 
-        websocket.cirrina = CirrinaWSContext(request, session)
-        self.websockets[group]["connections"].append(websocket)
+        ws_client.cirrina = CirrinaWSContext(request, session)
+        self.websockets[group]["connections"].append(ws_client)
         try:
-            await self.websockets[group]["connect"](websocket)
+            await self.websockets[group]["connect"](ws_client)
         except Exception as exc:
             self.logger.error("websocket: error in connect event handler")
             self.logger.exception(exc)
 
         while True:
             try:
-                msg = await websocket.receive()
+                msg = await ws_client.receive()
                 if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
                     self.logger.info('websocket closed')
                     break
 
                 self.logger.debug("websocket got: %s", msg)
                 if msg.type == WSMsgType.TEXT:
-                    await self.websockets[group]["handler"](websocket, msg.data)
+                    await self.websockets[group]["handler"](ws_client, msg.data)
                 elif msg.type == WSMsgType.ERROR:
-                    self.logger.info('websocket closed with exception %s', websocket.exception())
+                    self.logger.info('websocket closed with exception %s', ws_client.exception())
             except Exception as exc:
                 self.logger.exception(exc)
 
-        self.websockets[group]["connections"].remove(websocket)
+        self.websockets[group]["connections"].remove(ws_client)
         try:
-            await self.websockets[group]["disconnect"](websocket)
+            await self.websockets[group]["disconnect"](ws_client)
         except Exception as exc:
             self.logger.error("websocket: error in disconnect event handler")
             self.logger.exception(exc)
 
-        return websocket
+        return ws_client
 
     # JRPC protocol
 
