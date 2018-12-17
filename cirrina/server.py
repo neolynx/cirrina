@@ -456,7 +456,10 @@ class Server:
         if group not in self.websockets:
             raise Exception("Websocket group '%s' not found" % group)
 
-        for ws in self.websockets[group]:
+        if "connections" not in self.websockets[group]:
+            raise Exception("Websocket group '%s' has no connections" % group)
+
+        for ws in self.websockets[group]["connections"]:
             # FIXME: use array ?
             ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
 
@@ -471,7 +474,7 @@ class Server:
             self.app.router.add_route('GET', location, _ws_wrapper)
             if group not in self.websockets:
                 self.websockets[group] = {}
-            if "message" in self.websockets[group]:
+            if "handler" in self.websockets[group]:
                 raise Exception("Websocket message handler already defined in group '%s'" % group)
             self.websockets[group]["handler"] = func
             self.websockets[group]["authenticated"] = authenticated
