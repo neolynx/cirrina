@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import os
+from concurrent import futures
 from aiohttp import web, WSMsgType
 from aiohttp_session import setup, get_session  # , session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
@@ -57,6 +58,9 @@ class Server:
 
         #: Holds the aiohttp web application instance.
         self.app = web.Application(loop=self.loop)  #, middlewares=[session_middleware])
+
+        # executor for threaded http requests
+        self.executor = futures.ThreadPoolExecutor()
 
         #: Holds the asyncio server instance.
         self.srv = None
@@ -314,14 +318,22 @@ class Server:
 
     # HTTP protocol
 
-    def _session_wrapper(self, func):
+    def _session_wrapper(self, func, threaded=False):
         @wraps(func)
         async def _wrap(request):
             session = await get_session(request)
             request.cirrina = CirrinaContext(web_session=session)
             if self.create_context_func:
                 self.create_context_func(request.cirrina)
-            ret = (await func(request))
+            if threaded:
+
+                def blocking_wrappper():
+                    # run in new loop
+                    return asyncio.new_event_loop().run_until_complete(func(request))
+
+                ret = await self.loop.run_in_executor(self.executor, blocking_wrappper)
+            else:
+                ret = (await func(request))
             if self.destroy_context_func:
                 self.destroy_context_func(request.cirrina)
             return ret
@@ -333,66 +345,66 @@ class Server:
         """
         self.app.router.add_static(location, path)
 
-    def http_get(self, location):
+    def http_get(self, location, threaded=False):
         """
         Register HTTP GET route.
         """
         def _wrapper(func):
-            self.app.router.add_route('GET', location, self._session_wrapper(func))
+            self.app.router.add_route('GET', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
-    def http_head(self, location):
+    def http_head(self, location, threaded=False):
         """
         Register HTTP HEAD route.
         """
         def _wrapper(func):
-            self.app.router.add_route('HEAD', location, self._session_wrapper(func))
+            self.app.router.add_route('HEAD', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
-    def http_options(self, location):
+    def http_options(self, location, threaded=False):
         """
         Register HTTP OPTIONS route.
         """
         def _wrapper(func):
-            self.app.router.add_route('OPTIONS', location, self._session_wrapper(func))
+            self.app.router.add_route('OPTIONS', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
-    def http_post(self, location):
+    def http_post(self, location, threaded=False):
         """
         Register HTTP POST route.
         """
         def _wrapper(func):
-            self.app.router.add_route('POST', location, self._session_wrapper(func))
+            self.app.router.add_route('POST', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
-    def http_put(self, location):
+    def http_put(self, location, threaded=False):
         """
         Register HTTP PUT route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PUT', location, self._session_wrapper(func))
+            self.app.router.add_route('PUT', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
-    def http_patch(self, location):
+    def http_patch(self, location, threaded=False):
         """
         Register HTTP PATCH route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PATCH', location, self._session_wrapper(func))
+            self.app.router.add_route('PATCH', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
-    def http_delete(self, location):
+    def http_delete(self, location, threaded=False):
         """
         Register HTTP DELETE route.
         """
         def _wrapper(func):
-            self.app.router.add_route('DELETE', location, self._session_wrapper(func))
+            self.app.router.add_route('DELETE', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
