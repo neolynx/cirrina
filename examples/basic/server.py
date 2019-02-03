@@ -36,34 +36,32 @@ logger = logging.getLogger(__name__)
 #: Create cirrina app.
 app = cirrina.Server()
 app.http_static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
-wspath = '/ws'
-app.enable_websockets(wspath)
 app.enable_rpc('/jrpc')
+wspath = '/ws'
 
 @app.auth_handler
-async def auth_handler(username, password):
+async def auth_handler(request, username, password):
     if username == 'admin' and password == 'admin':
         return True
     return False
 
-@app.websocket_connect
-async def websocket_connected(ws, session):
-    logger.info("websocket: new authenticated connection, user: %s", session['username'])
+@app.websocket_connect()
+async def websocket_connected(wsclient):
+    username = wsclient.cirrina.web_session['username']
+    logger.info("websocket: new authenticated connection, user: %s", username)
 
-
-@app.websocket_message
-async def websocket_message(ws, session, msg):
-    logger.info("websocket: got message: %s", msg)
+@app.websocket_message(location = wspath)
+async def websocket_message(wsclient, msg):
+    logger.info("websocket: got message: '%s'", msg)
     app.websocket_broadcast(msg)
 
-
-@app.websocket_disconnect
-async def websocket_closed(session):
+@app.websocket_disconnect()
+async def websocket_closed(wsclient):
     logger.info('websocket connection closed')
 
 
 @app.http_get('/login')
-async def _login(request, session):
+async def _login(request):
     """
     Send login page to client.
     """
@@ -71,7 +69,7 @@ async def _login(request, session):
 
 @app.http_get('/')
 @app.authenticated
-async def default(request, session):
+async def default(request):
     """
     ---
     description: This is the default page
@@ -86,8 +84,10 @@ async def default(request, session):
             description: invalid HTTP Method
     """
 
-    visit_count = session['visit_count'] if 'visit_count' in session else 1
-    session['visit_count'] = visit_count + 1
+    visit_count = 0
+    if 'visit_count' in request.cirrina.web_session:
+        visit_count = request.cirrina.web_session['visit_count']
+    request.cirrina.web_session['visit_count'] = visit_count + 1
 
     html = '''<!DOCTYPE HTML>
 <html>
@@ -160,3 +160,4 @@ async def file_upload(request, session, upload_die, filename, size):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     app.run('0.0.0.0', 8080, debug=True)
+
