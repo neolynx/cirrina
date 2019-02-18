@@ -324,18 +324,29 @@ class Server:
             session = await get_session(request)
             request.cirrina = CirrinaContext(web_session=session)
             if self.create_context_func:
-                self.create_context_func(request.cirrina)
-            if threaded:
+                try:
+                    self.create_context_func(request.cirrina)
+                except Exception as exc:
+                    self.logger.exeption(exc)
 
-                def blocking_wrappper():
-                    # run in new loop
-                    return asyncio.new_event_loop().run_until_complete(func(request))
+            ret = None
+            try:
+                if threaded:
+                    def blocking_wrappper():
+                        # run in new loop
+                        return asyncio.new_event_loop().run_until_complete(func(request))
 
-                ret = await self.loop.run_in_executor(self.executor, blocking_wrappper)
-            else:
-                ret = (await func(request))
+                    ret = await self.loop.run_in_executor(self.executor, blocking_wrappper)
+                else:
+                    ret = (await func(request))
+            except Exception as exc:
+                self.logger.exeption(exc)
+
             if self.destroy_context_func:
-                self.destroy_context_func(request.cirrina)
+                try:
+                    self.destroy_context_func(request.cirrina)
+                except Exception as exc:
+                    self.logger.exeption(exc)
             return ret
         return _wrap
 
@@ -461,6 +472,7 @@ class Server:
 
     # WebSocket protocol
 
+    # FIXME: make async ?
     def websocket_broadcast(self, msg, group="main"):
         """
         Broadcast a message to all websocket connections.
@@ -472,8 +484,12 @@ class Server:
             raise Exception("Websocket group '%s' has no connections" % group)
 
         for ws in self.websockets[group]["connections"]:
-            # FIXME: use array ?
-            ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+            try:
+                ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+            except Exception as exc:
+                self.websockets[group]["connections"].remove(ws)
+                self.logger.exception(exc)
+
 
     def websocket_message(self, location, group="main", authenticated=True):
         """
@@ -577,6 +593,8 @@ class Server:
                     await self.websockets[group]["handler"](ws_client, msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     self.logger.info('websocket closed with exception %s', ws_client.exception())
+            except futures._base.CancelledError:
+                pass
             except Exception as exc:
                 self.logger.exception(exc)
 
