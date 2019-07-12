@@ -469,11 +469,9 @@ class Server:
             return upload_handler
         return _wrapper
 
-
     # WebSocket protocol
 
-    # FIXME: make async ?
-    def websocket_broadcast(self, msg, group="main"):
+    async def websocket_broadcast(self, msg, group="main"):
         """
         Broadcast a message to all websocket connections.
         """
@@ -485,11 +483,13 @@ class Server:
 
         for ws in self.websockets[group]["connections"]:
             try:
-                ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+                if asyncio.iscoroutinefunction(ws.send_str):
+                    await ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+                else:
+                    ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
             except Exception as exc:
                 self.websockets[group]["connections"].remove(ws)
                 self.logger.exception(exc)
-
 
     def websocket_message(self, location, group="main", authenticated=True):
         """
@@ -569,7 +569,10 @@ class Server:
             session = await get_session(request)
             if session.new:
                 self.logger.debug('websocket: not logged in')
-                ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
+                if asyncio.iscoroutinefunction(ws_client.send_str):
+                    await ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
+                else:
+                    ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
                 ws_client.close()
                 return ws_client
 
