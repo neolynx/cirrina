@@ -327,7 +327,7 @@ class Server:
                 try:
                     self.create_context_func(request.cirrina)
                 except Exception as exc:
-                    self.logger.exeption(exc)
+                    self.logger.exception(exc)
 
             ret = None
             try:
@@ -340,13 +340,13 @@ class Server:
                 else:
                     ret = (await func(request))
             except Exception as exc:
-                self.logger.exeption(exc)
+                self.logger.exception(exc)
 
             if self.destroy_context_func:
                 try:
                     self.destroy_context_func(request.cirrina)
                 except Exception as exc:
-                    self.logger.exeption(exc)
+                    self.logger.exception(exc)
             return ret
         return _wrap
 
