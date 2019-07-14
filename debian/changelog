@@ -1,3 +1,12 @@
+cirrina (0.3.0) stable; urgency=medium
+
+  * support new aiohttp
+  * add more exception handling
+  * support threaded http requests
+  * bug fixes
+
+ -- André Roth <neolynx@gmail.com>  Sun, 14 Jul 2019 14:59:33 +0200
+
 cirrina (0.1.0) jessie; urgency=medium
 
   * debianized
