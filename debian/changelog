@@ -1,3 +1,9 @@
+cirrina (0.3.0.buster) stable; urgency=medium
+
+  * build for buster
+
+ -- André Roth <neolynx@gmail.com>  Sun, 18 Aug 2019 10:52:34 +0200
+
 cirrina (0.3.0) stable; urgency=medium
 
   * support new aiohttp
