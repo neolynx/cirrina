@@ -22,4 +22,5 @@ debian/python3-cirrina.postinst.debhelper
 debian/python3-cirrina.prerm.debhelper
 debian/python3-cirrina.substvars
 debian/python3-cirrina/
+debian/.debhelper/
 
