@@ -1,3 +1,9 @@
+cirrina (0.3.0.buster1) stable; urgency=medium
+
+  * make backward compatible for newer aiohttp
+
+ -- André Roth <neolynx@gmail.com>  Fri, 30 Aug 2019 14:34:45 +0200
+
 cirrina (0.3.0.buster) stable; urgency=medium
 
   * build for buster
