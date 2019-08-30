@@ -15,7 +15,7 @@ from concurrent import futures
 from aiohttp import web, WSMsgType
 from aiohttp_session import setup, get_session  # , session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from aiohttp_jrpc import JError, JResponse, decode, InternalError, ParseError
+from aiohttp_jrpc import JError, JResponse, decode, InternalError, InvalidRequest, ParseError
 from aiohttp_swagger import setup_swagger
 from collections import Callable
 from cryptography import fernet
@@ -57,7 +57,7 @@ class Server:
         self.logout_url = logout_url
 
         #: Holds the aiohttp web application instance.
-        self.app = web.Application(loop=self.loop)  #, middlewares=[session_middleware])
+        self.app = web.Application(loop=self.loop)
 
         # executor for threaded http requests
         self.executor = futures.ThreadPoolExecutor()
@@ -131,8 +131,8 @@ class Server:
                 access_log_format='%r %s',
                 access_log=self.logger,
                 logger=self.logger),
-                address,
-                port)
+            address,
+            port)
 
     async def _stop(self):
         """
@@ -180,7 +180,6 @@ class Server:
 
         self.logger.info('Stopped cirrina server')
 
-
     def startup(self, func):
         """
         Decorator to provide one or more startup
@@ -188,7 +187,6 @@ class Server:
         """
         self.startup_handlers.append(func)
         return func
-
 
     def shutdown(self, func):
         """
@@ -198,8 +196,7 @@ class Server:
         self.shutdown_handlers.append(func)
         return func
 
-
-    ### Authentication ###
+    # Authentication
 
     def auth_handler(self, func):
         """
@@ -314,7 +311,6 @@ class Server:
                 return response
             return (await func(request))
         return _wrapper
-
 
     # HTTP protocol
 
@@ -658,7 +654,7 @@ class Server:
                 try:
                     method = _rpc.cirrina.rpc_methods[data['method']]
                 except Exception:
-                    _rpc.cirrina.logger.error("JRPC method not found: '%s'"%data['method'])
+                    _rpc.cirrina.logger.error("JRPC method not found: '%s'" % data['method'])
                     return JError(data).method()
 
                 session = await get_session(request)
