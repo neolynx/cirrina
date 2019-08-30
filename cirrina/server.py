@@ -329,6 +329,10 @@ class Server:
                 except Exception as exc:
                     self.logger.exception(exc)
 
+            # backward compatibility to older aiohttp API
+            if not hasattr(request, "GET"):
+                request.GET = request.query
+
             ret = None
             try:
                 if threaded:
