@@ -1,3 +1,9 @@
+cirrina (0.3.0.buster3) stable; urgency=medium
+
+  * server: make backward compatibility more failsafe
+
+ -- André Roth <neolynx@gmail.com>  Fri, 30 Aug 2019 20:18:37 +0200
+
 cirrina (0.3.0.buster2) stable; urgency=medium
 
   * make backward compatible to older aiohttp
