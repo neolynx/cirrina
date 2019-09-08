@@ -1,3 +1,9 @@
+cirrina (0.3.1) stable; urgency=medium
+
+  * bump version 0.3.1
+
+ -- André Roth <neolynx@gmail.com>  Sun, 08 Sep 2019 22:40:33 +0200
+
 cirrina (0.3.1~rc1) stable; urgency=medium
 
   * build for stretch and buster
