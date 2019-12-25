@@ -1,6 +1,9 @@
 language: python
 python:
     - '3.5'
+    - '3.6'
+    - '3.7'
+    - '3.8'
 
 install:
     - python setup.py build sdist
@@ -17,3 +20,4 @@ deploy:
     tags: true
     distributions: sdist bdist_wheel
     repo: neolynx/cirrina
+    condition: $TRAVIS_PYTHON_VERSION = "3.5"
