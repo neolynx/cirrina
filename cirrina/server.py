@@ -244,10 +244,10 @@ class Server:
         produces:
         - text/plain
         responses:
-            "302":
+            "200":
                 description: successful login.
-            "405":
-                description: invalid HTTP Method
+            "400":
+                description: login failed
         """
 
         # get username and password from POST request
@@ -255,17 +255,17 @@ class Server:
         username = data.get('username')
         password = data.get('password')
 
-        # check if username and password are valid
-        for auth_handler in self.auth_handlers:
-            if (await auth_handler(request, username, password)) is True:
-                self.logger.debug('User authenticated: %s', username)
-                request.cirrina.web_session['username'] = username
-                response = web.Response(status=302)
-                response.headers['Location'] = data.get('path', '/')
-                return response
-        self.logger.debug('User authentication failed: %s', username)
-        response = web.Response(status=302)
-        response.headers['Location'] = self.login_url
+        if username and password:
+            username = username.lower()
+            for auth_handler in self.auth_handlers:
+                if (await auth_handler(request, username, password)) is True:
+                    self.logger.debug('User authenticated: %s', username)
+                    request.cirrina.web_session['username'] = username
+                    response = web.Response(status=200)
+                    return response
+        self.logger.warn('User authentication failed for \'%s\'', str(username))
+        await asyncio.sleep(4)
+        response = web.Response(status=400)
         request.cirrina.web_session.invalidate()
         return response
 
@@ -287,7 +287,7 @@ class Server:
         """
 
         if not request.cirrina.web_session:
-            self.logger.debug('No valid session in request for logout')
+            self.logger.warn('No valid session in request for logout')
             return web.Response(status=200)  # FIXME: what should be returned?
 
         # run all logout handlers before invalidating session
@@ -306,8 +306,7 @@ class Server:
         @wraps(func)
         async def _wrapper(request):  # pylint: disable=missing-docstring
             if request.cirrina.web_session.new:
-                response = web.Response(status=302)
-                response.headers['Location'] = self.login_url + "?path=" + request.path_qs
+                response = web.Response(status=401)
                 return response
             return (await func(request))
         return _wrapper
