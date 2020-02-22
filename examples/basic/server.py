@@ -12,56 +12,28 @@ import cirrina
 
 from aiohttp import web
 
-#: Holds the login html template
-LOGIN_HTML = '''<!DOCTYPE HTML>
-<html>
-  <body>
-    <div style="max-width:350px; margin:auto; text-align:right;">
-      <h1 style="text-align:left;">Login</h1>
-      <form id="loginForm" method="post">
-        Username: <input type="text" name="username"><br/>
-        Password: <input type="password" name="password"><br/>
-        <input type="hidden" name="path" value="{0}">
-        <button type="button" onclick="login()">Login</button>
-      </form>
-    </div>
-    <script>
-    function login()
-    {{
-        var form = document.getElementById('loginForm');
-        var form_data = new FormData(form);
-        var http = new XMLHttpRequest();
-        http.open('POST', '/login', true);
-        http.addEventListener('load', function(event) {{
-           if (http.status >= 200 && http.status < 300) {{
-              window.location = "/";
-           }} else {{
-              alert('Authentication failed !');
-           }}
-        }});
-        http.send(form_data);
-    }}
-    </script>
-  </body>
-</html>
-'''
-
-
 #: Holds the logger for the current example
 logger = logging.getLogger(__name__)
 
 #: Create cirrina app.
 app = cirrina.Server()
-app.http_static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
 app.enable_rpc('/jrpc')
 wspath = '/ws'
 
 
 @app.auth_handler
 async def auth_handler(request, username, password):
+    # Example user and password
     if username == 'admin' and password == 'admin':
         return True
     return False
+
+
+@app.auth_unauthorized
+async def auth_unauthorized(request):
+    response = web.Response(status=302)
+    response.headers['Location'] = '/login.html'
+    return response
 
 
 @app.websocket_connect()
@@ -73,20 +45,12 @@ async def websocket_connected(wsclient):
 @app.websocket_message(location=wspath)
 async def websocket_message(wsclient, msg):
     logger.info("websocket: got message: '%s'", msg)
-    app.websocket_broadcast(msg)
+    await app.websocket_broadcast(msg)
 
 
 @app.websocket_disconnect()
 async def websocket_closed(wsclient):
     logger.info('websocket connection closed')
-
-
-@app.http_get('/login')
-async def _login(request):
-    """
-    Send login page to client.
-    """
-    return web.Response(text=LOGIN_HTML.format(request.get('path', "/")), content_type="text/html")
 
 
 @app.http_get('/')
@@ -116,40 +80,49 @@ async def default(request):
 <head>
 <script type="text/javascript" src="static/cirrina.js"></script>
 <script type="text/javascript">
-  function log( msg )
-  {
-    document.body.innerHTML += msg + "<br/>";
-    /*alert( msg );*/
-  }
   var cirrina = new Cirrina('%s');
-
   cirrina.onopen = function(ws)
   {
-    log("connected" );
-    msg = "Hello"
-    log("send: " + msg );
-    ws.send( msg );
-  };
+    log("websocket connected" );
+    sendmessage("Hello !");
+  }
   cirrina.onmessage = function (ws, msg)
   {
-    log("got: " + msg );
-  };
+    log("server: " + msg );
+  }
   cirrina.onclose = function()
   {
-    log("disconnected");
-  };
+    log("websocket disconnected");
+  }
+  function log(msg)
+  {
+    textbox = document.getElementById("websocket");
+    textbox.innerHTML += msg + "<br/>";
+    textbox.scrollTop = textbox.scrollHeight;
+  }
+  function sendmessage( msg )
+  {
+    log("client: " + msg );
+    cirrina.send( msg );
+    document.getElementById('text').value = "";
+    document.getElementById('text').focus();
+  }
 </script>
 </head>
 <body>
- <input type="text" id="text">
- <input type='button' value='Send' onclick="cirrina.send(document.getElementById('text').value);">
- visit count: %d <br/>
- <br/>
+ <h1>Cirrina Example</h1>
+ Page Visit Count: %d <br/>
+ <h2>File Upload Example</h2>
  <form id="upload" action="/upload" method="post" accept-charset="utf-8" enctype="multipart/form-data">
     <label for="file">File Upload</label>
     <input id="file" name="file" type="file" value="" />
-    <input type="button" value="submit" onclick="form.submit();"/>
+    <input type="button" value="Upload" onclick="form.submit();"/>
  </form>
+
+ <h2>Websocket Example</h2>
+ <div id="websocket" style="width: 500px; border: 2px solid; padding: 15px; height: 150px; overflow-x: auto;"></div>
+ <input type="text" id="text">
+ <input type='button' value='Send' onclick="sendmessage(document.getElementById('text').value);">
 </body>
 </html>
 ''' % (wspath, visit_count)
@@ -177,8 +150,8 @@ def onstop():
 
 
 @app.http_upload('/upload', upload_dir="upload/")
-async def file_upload(request, session, upload_die, filename, size):
-    return web.Response(text='file uploaded: {} ({} bytes)'.format(filename, size))
+async def file_upload(request, session, upload_die, filename):
+    return web.Response(text='file uploaded: {}'.format(filename))
 
 
 if __name__ == "__main__":
@@ -186,4 +159,5 @@ if __name__ == "__main__":
     port = 8765
     if len(sys.argv) > 1:
         port = int(sys.argv[1])
+    app.http_static("/", 'static/')
     app.run('0.0.0.0', port, debug=True)

@@ -1,0 +1,33 @@
+<!DOCTYPE HTML>
+<html>
+  <body>
+    <div style="max-width:350px; margin:auto; text-align:right;">
+      <h1 style="text-align:left;">Login</h1>
+      <form id="loginForm" method="post">
+        Username: <input type="text" name="username"><br/>
+        Password: <input type="password" name="password"><br/>
+        <input type="hidden" name="path" value="wherewecamefrom">
+        <button id="loginbutton" type="button" onclick="login()">Login</button>
+      </form>
+    </div>
+    <script>
+    function login()
+    {
+        document.getElementById("loginbutton").disabled = true;
+        var form = document.getElementById('loginForm');
+        var form_data = new FormData(form);
+        var http = new XMLHttpRequest();
+        http.open('POST', '/login', true);
+        http.addEventListener('load', function(event) {
+           if (http.status >= 200 && http.status < 300) {
+              window.location = "/";
+           } else {
+              alert('Authentication failed !');
+              document.getElementById("loginbutton").disabled = false;
+           }
+        });
+        http.send(form_data);
+    }
+    </script>
+  </body>
+</html>
