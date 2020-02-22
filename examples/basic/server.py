@@ -7,24 +7,41 @@ Simple cirrina server example.
 """
 
 import logging
-import asyncio
+import sys
+import cirrina
 
 from aiohttp import web
-
-import cirrina
 
 #: Holds the login html template
 LOGIN_HTML = '''<!DOCTYPE HTML>
 <html>
   <body>
-    <form method="post" action="/login">
-      User name:<br/>
-        <input type="text" name="username"><br/>
-      User password:<br/>
-        <input type="password" name="password"><br/>
+    <div style="max-width:350px; margin:auto; text-align:right;">
+      <h1 style="text-align:left;">Login</h1>
+      <form id="loginForm" method="post">
+        Username: <input type="text" name="username"><br/>
+        Password: <input type="password" name="password"><br/>
         <input type="hidden" name="path" value="{0}">
-        <input type="submit" value="Login"><br/>
-    </form>
+        <button type="button" onclick="login()">Login</button>
+      </form>
+    </div>
+    <script>
+    function login()
+    {{
+        var form = document.getElementById('loginForm');
+        var form_data = new FormData(form);
+        var http = new XMLHttpRequest();
+        http.open('POST', '/login', true);
+        http.addEventListener('load', function(event) {{
+           if (http.status >= 200 && http.status < 300) {{
+              window.location = "/";
+           }} else {{
+              alert('Authentication failed !');
+           }}
+        }});
+        http.send(form_data);
+    }}
+    </script>
   </body>
 </html>
 '''
@@ -39,21 +56,25 @@ app.http_static("/static", cirrina.Server.DEFAULT_STATIC_PATH)
 app.enable_rpc('/jrpc')
 wspath = '/ws'
 
+
 @app.auth_handler
 async def auth_handler(request, username, password):
     if username == 'admin' and password == 'admin':
         return True
     return False
 
+
 @app.websocket_connect()
 async def websocket_connected(wsclient):
     username = wsclient.cirrina.web_session['username']
     logger.info("websocket: new authenticated connection, user: %s", username)
 
-@app.websocket_message(location = wspath)
+
+@app.websocket_message(location=wspath)
 async def websocket_message(wsclient, msg):
     logger.info("websocket: got message: '%s'", msg)
     app.websocket_broadcast(msg)
+
 
 @app.websocket_disconnect()
 async def websocket_closed(wsclient):
@@ -66,6 +87,7 @@ async def _login(request):
     Send login page to client.
     """
     return web.Response(text=LOGIN_HTML.format(request.get('path', "/")), content_type="text/html")
+
 
 @app.http_get('/')
 @app.authenticated
@@ -130,7 +152,7 @@ async def default(request):
  </form>
 </body>
 </html>
-'''%(wspath, visit_count)
+''' % (wspath, visit_count)
     resp = web.Response(text=html, content_type="text/html")
     return resp
 
@@ -153,11 +175,15 @@ def onstart():
 def onstop():
     logger.info("shutting down...")
 
+
 @app.http_upload('/upload', upload_dir="upload/")
 async def file_upload(request, session, upload_die, filename, size):
     return web.Response(text='file uploaded: {} ({} bytes)'.format(filename, size))
 
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    app.run('0.0.0.0', 8080, debug=True)
-
+    port = 8765
+    if len(sys.argv) > 1:
+        port = int(sys.argv[1])
+    app.run('0.0.0.0', port, debug=True)
