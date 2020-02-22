@@ -24,3 +24,5 @@ debian/python3-cirrina.substvars
 debian/python3-cirrina/
 debian/.debhelper/
 
+# uploaded files
+examples/basic/upload/
