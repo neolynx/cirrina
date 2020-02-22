@@ -78,7 +78,8 @@ async def default(request):
     html = '''<!DOCTYPE HTML>
 <html>
 <head>
-<script type="text/javascript" src="static/cirrina.js"></script>
+<meta http-equiv="content-type" content="text/html; charset=utf-8">
+<script type="text/javascript" src="cirrina.js"></script>
 <script type="text/javascript">
   var cirrina = new Cirrina('%s');
   cirrina.onopen = function(ws)
@@ -107,16 +108,38 @@ async def default(request):
     document.getElementById('text').value = "";
     document.getElementById('text').focus();
   }
+
+  function upload()
+  {
+    var form = document.getElementById('upload_form');
+    var form_data = new FormData(form);
+    var http = new XMLHttpRequest();
+    http.open('POST', '/upload', true);
+    http.addEventListener('load', function(event) {
+       if (http.status >= 200 && http.status < 300) {
+         console.log('file uploaded');
+       } else {
+         alert('Upload failed !');
+       }
+    });
+    if(http.upload) {
+      http.upload.onprogress = function(e) {
+        var done = e.position || e.loaded, total = e.totalSize || e.total;
+        console.log('upload progress: ' + done + ' / ' + total + ' = ' + (Math.floor(done/total*1000)/10) + '%%');
+      };
+    }
+    http.send(form_data);
+  }
 </script>
 </head>
 <body>
  <h1>Cirrina Example</h1>
  Page Visit Count: %d <br/>
  <h2>File Upload Example</h2>
- <form id="upload" action="/upload" method="post" accept-charset="utf-8" enctype="multipart/form-data">
-    <label for="file">File Upload</label>
-    <input id="file" name="file" type="file" value="" />
-    <input type="button" value="Upload" onclick="form.submit();"/>
+ <form id="upload_form" action="/upload" method="post" accept-charset="utf-8" enctype="multipart/form-data">
+    <label for="file">Select File: </label>
+    <input id="file" name="file" type="file" value=""/><br/>
+    <button type="button" onclick="upload();">Upload</button>
  </form>
 
  <h2>Websocket Example</h2>
