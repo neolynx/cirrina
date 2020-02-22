@@ -84,6 +84,8 @@ class Server:
         self.startup_handlers = []
         #: Holds functions which are called on shutdown
         self.shutdown_handlers = []
+        #: Holds handler for unauthorized calls
+        self.auth_unauthorized_handler = None
 
         self.create_context_func = None
         self.destroy_context_func = None
@@ -206,6 +208,13 @@ class Server:
         self.auth_handlers.append(func)
         return func
 
+    def auth_unauthorized(self, func):
+        """
+        Decorator to provide handler for unauthorized calls.
+        """
+        self.auth_unauthorized_handler = func
+        return func
+
     def logout_handler(self, func):
         """
         Decorator to specify function which should
@@ -306,9 +315,10 @@ class Server:
         @wraps(func)
         async def _wrapper(request):  # pylint: disable=missing-docstring
             if request.cirrina.web_session.new:
-                response = web.Response(status=401)
-                return response
-            return (await func(request))
+                if self.auth_unauthorized_handler:
+                    return await self.auth_unauthorized_handler(request)
+                return web.Response(status=401)
+            return await func(request)
         return _wrapper
 
     # HTTP protocol
