@@ -1,3 +1,9 @@
+cirrina (0.3.3) stable; urgency=medium
+
+  * server: improve websocket broadcast
+
+ -- André Roth <neolynx@gmail.com>  Sat, 23 May 2020 14:47:59 +0000
+
 cirrina (0.3.2) stable; urgency=medium
 
   * build for molior 1.4.0
