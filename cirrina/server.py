@@ -493,9 +493,9 @@ class Server:
         for ws in self.websockets[group]["connections"]:
             try:
                 if asyncio.iscoroutinefunction(ws.send_str):
-                    await ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+                    await ws.send_str(json.dumps(msg))
                 else:
-                    ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+                    ws.send_str(json.dumps(msg))
             except Exception as exc:
                 self.websockets[group]["connections"].remove(ws)
                 self.logger.exception(exc)
