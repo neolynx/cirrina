@@ -17,7 +17,7 @@ from aiohttp_session import setup, get_session  # , session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_jrpc import JError, JResponse, decode, InternalError, InvalidRequest, ParseError
 from aiohttp_swagger import setup_swagger
-from collections import Callable
+from collections.abc import Callable
 from cryptography import fernet
 from functools import wraps
 from tempfile import NamedTemporaryFile
