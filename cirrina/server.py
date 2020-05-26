@@ -57,7 +57,7 @@ class Server:
         self.logout_url = logout_url
 
         #: Holds the aiohttp web application instance.
-        self.app = web.Application(loop=self.loop)
+        self.app = web.Application()
 
         # executor for threaded http requests
         self.executor = futures.ThreadPoolExecutor()
