@@ -459,7 +459,7 @@ class Server:
 
                     filename = filename.replace("/", "")  # no paths separators allowed
 
-                    self.logger.info("http_upload: receiving file: '%s'", filename)
+                    self.logger.debug("http_upload: receiving file: '%s'", filename)
                     size = 0
                     # ensure dir exists
                     tempfile = None
@@ -578,6 +578,7 @@ class Server:
             session = await get_session(request)
             if session.new:
                 self.logger.debug('websocket: not logged in')
+
                 if asyncio.iscoroutinefunction(ws_client.send_str):
                     await ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
                 else:
@@ -597,14 +598,14 @@ class Server:
             try:
                 msg = await ws_client.receive()
                 if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
-                    self.logger.info('websocket closed')
+                    self.logger.debug('websocket closed')
                     break
 
                 self.logger.debug("websocket got: %s", msg)
                 if msg.type == WSMsgType.TEXT:
                     await self.websockets[group]["handler"](ws_client, msg.data)
                 elif msg.type == WSMsgType.ERROR:
-                    self.logger.info('websocket closed with exception %s', ws_client.exception())
+                    self.logger.error('websocket closed with exception %s', ws_client.exception())
             except futures._base.CancelledError:
                 pass
             except Exception as exc:
