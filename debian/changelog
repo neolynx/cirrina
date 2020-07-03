@@ -1,3 +1,9 @@
+cirrina (0.4.0~alpha5) stable; urgency=medium
+
+  * cleanup
+
+ -- André Roth <neolynx@gmail.com>  Fri, 03 Jul 2020 10:56:11 +0000
+
 cirrina (0.4.0~alpha4) stable; urgency=medium
 
   * bump version 0.4.0~alpha4
