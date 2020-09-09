@@ -46,7 +46,7 @@ class Server:
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
 
-    def __init__(self, loop=None, login_url="/login", logout_url="/logout"):
+    def __init__(self, loop=None, login_url="/api/login", logout_url="/api/logout"):
         if loop is None:
             loop = asyncio.get_event_loop()
         #: Holds the asyncio event loop which is used to handle requests.
@@ -258,11 +258,9 @@ class Server:
             "400":
                 description: login failed
         """
-
-        # get username and password from POST request
-        data = await request.post()
-        username = data.get('username')
-        password = data.get('password')
+        params = await request.json()
+        username = params.get('username')
+        password = params.get('password')
 
         if username and password:
             username = username.lower()
