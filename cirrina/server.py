@@ -581,7 +581,7 @@ class Server:
                     await ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
                 else:
                     ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
-                ws_client.close()
+                await ws_client.close()
                 return ws_client
 
         ws_client.cirrina = CirrinaWSContext(request, session)
