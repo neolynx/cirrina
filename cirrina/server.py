@@ -258,9 +258,13 @@ class Server:
             "400":
                 description: login failed
         """
-        params = await request.json()
-        username = params.get('username')
-        password = params.get('password')
+        try:
+            params = await request.json()
+            username = params.get('username')
+            password = params.get('password')
+        except Exception as exc:
+            self.logger.exception(exc)
+            return web.Response(status=400)
 
         if username and password:
             username = username.lower()
