@@ -149,9 +149,10 @@ class Server:
                 handler()
             except Exception as exc:
                 self.logger.exception(exc)
-        for ws_group in self.websockets:
-            for ws in self.websockets[ws_group]["connections"]:
-                ws.close()
+        # FIXME: websocket close on server hangs
+        # for ws_group in self.websockets:
+        #    for ws in self.websockets[ws_group]["connections"]:
+        #         await ws.close()
         await self.app.shutdown()
 
     def run(self, address='127.0.0.1', port=2100, logger=None, debug=False):
