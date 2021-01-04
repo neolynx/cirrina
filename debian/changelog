@@ -1,3 +1,9 @@
+cirrina (0.4.0~alpha9) stable; urgency=medium
+
+  * bump version 0.4.0~alpha9
+
+ -- André Roth <andre.roth@roche.com>  Mon, 04 Jan 2021 22:14:05 +0100
+
 cirrina (0.4.0~alpha8) stable; urgency=medium
 
   * bump version 0.4.0~alpha8
