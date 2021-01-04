@@ -176,7 +176,10 @@ class Server:
         self.logger.debug("Closing all tasks...")
         for task in asyncio.Task.all_tasks():
             task.cancel()
-        self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
+        try:
+            self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
+        except Exception:
+            pass
         self.logger.debug("Closing the loop...")
         self.loop.close()
 
