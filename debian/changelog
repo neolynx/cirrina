@@ -1,3 +1,104 @@
+cirrina (0.4.0~alpha9) stable; urgency=medium
+
+  * bump version 0.4.0~alpha9
+
+ -- André Roth <andre.roth@roche.com>  Mon, 04 Jan 2021 22:14:05 +0100
+
+cirrina (0.4.0~alpha8) stable; urgency=medium
+
+  * bump version 0.4.0~alpha8
+
+ -- André Roth <neolynx@gmail.com>  Wed, 25 Nov 2020 21:33:07 +0000
+
+cirrina (0.4.0~alpha7) stable; urgency=medium
+
+  * bump version 0.4.0~alpha7
+
+ -- André Roth <neolynx@gmail.com>  Wed, 09 Sep 2020 18:30:31 +0200
+
+cirrina (0.4.0~alpha5) stable; urgency=medium
+
+  * cleanup
+
+ -- André Roth <neolynx@gmail.com>  Fri, 03 Jul 2020 10:56:11 +0000
+
+cirrina (0.4.0~alpha4) stable; urgency=medium
+
+  * bump version 0.4.0~alpha4
+
+ -- André Roth <neolynx@gmail.com>  Wed, 27 May 2020 23:33:54 +0200
+
+cirrina (0.4.0~alpha3) stable; urgency=medium
+
+  * bump version 0.4.0~alpha3
+
+ -- André Roth <neolynx@gmail.com>  Wed, 27 May 2020 22:27:05 +0200
+
+cirrina (0.4.0~alpha2) stable; urgency=medium
+
+  * bump version 0.4.0~alpha2
+
+ -- André Roth <neolynx@gmail.com>  Wed, 27 May 2020 22:07:11 +0200
+
+cirrina (0.4.0~alpha1) stable; urgency=medium
+
+  * bump version 0.4.0~alpha1
+
+ -- André Roth <neolynx@gmail.com>  Tue, 26 May 2020 17:54:16 +0200
+
+cirrina (0.3.4) stable; urgency=medium
+
+  * bump version 0.3.4
+
+ -- André Roth <neolynx@gmail.com>  Tue, 26 May 2020 17:32:58 +0200
+
+cirrina (0.3.3) stable; urgency=medium
+
+  * server: improve websocket broadcast
+
+ -- André Roth <neolynx@gmail.com>  Sat, 23 May 2020 14:47:59 +0000
+
+cirrina (0.3.2) stable; urgency=medium
+
+  * build for molior 1.4.0
+  * server: support unauthorized handler
+  * build for stretch and buster
+  * server: make backward compatibility more failsafe
+  * make backward compatible to older aiohttp
+  * build for buster
+
+ -- André Roth <neolynx@gmail.com>  Tue, 19 May 2020 16:52:51 +0200
+
+cirrina (0.3.1) stable; urgency=medium
+
+  * bump version 0.3.1
+
+ -- André Roth <neolynx@gmail.com>  Sun, 08 Sep 2019 22:40:33 +0200
+
+cirrina (0.3.1~rc1) stable; urgency=medium
+
+  * build for stretch and buster
+
+ -- André Roth <neolynx@gmail.com>  Sun, 08 Sep 2019 19:48:02 +0200
+
+cirrina (0.3.0.buster3) stable; urgency=medium
+
+  * server: make backward compatibility more failsafe
+
+ -- André Roth <neolynx@gmail.com>  Fri, 30 Aug 2019 20:18:37 +0200
+
+cirrina (0.3.0.buster2) stable; urgency=medium
+
+  * make backward compatible to older aiohttp
+
+ -- André Roth <neolynx@gmail.com>  Fri, 30 Aug 2019 14:36:47 +0200
+
+cirrina (0.3.0.buster) stable; urgency=medium
+
+  * build for buster
+
+ -- André Roth <neolynx@gmail.com>  Sun, 18 Aug 2019 10:52:34 +0200
+
 cirrina (0.3.0) stable; urgency=medium
 
   * support new aiohttp

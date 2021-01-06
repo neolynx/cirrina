@@ -15,9 +15,9 @@ from concurrent import futures
 from aiohttp import web, WSMsgType
 from aiohttp_session import setup, get_session  # , session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from aiohttp_jrpc import JError, JResponse, decode, InternalError, ParseError
+from aiohttp_jrpc import JError, JResponse, decode, InternalError, InvalidRequest, ParseError
 from aiohttp_swagger import setup_swagger
-from collections import Callable
+from collections.abc import Callable
 from cryptography import fernet
 from functools import wraps
 from tempfile import NamedTemporaryFile
@@ -46,7 +46,7 @@ class Server:
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
 
-    def __init__(self, loop=None, login_url="/login", logout_url="/logout"):
+    def __init__(self, loop=None, login_url="/api/login", logout_url="/api/logout"):
         if loop is None:
             loop = asyncio.get_event_loop()
         #: Holds the asyncio event loop which is used to handle requests.
@@ -57,7 +57,7 @@ class Server:
         self.logout_url = logout_url
 
         #: Holds the aiohttp web application instance.
-        self.app = web.Application(loop=self.loop)  #, middlewares=[session_middleware])
+        self.app = web.Application()
 
         # executor for threaded http requests
         self.executor = futures.ThreadPoolExecutor()
@@ -84,6 +84,8 @@ class Server:
         self.startup_handlers = []
         #: Holds functions which are called on shutdown
         self.shutdown_handlers = []
+        #: Holds handler for unauthorized calls
+        self.auth_unauthorized_handler = None
 
         self.create_context_func = None
         self.destroy_context_func = None
@@ -131,8 +133,8 @@ class Server:
                 access_log_format='%r %s',
                 access_log=self.logger,
                 logger=self.logger),
-                address,
-                port)
+            address,
+            port)
 
     async def _stop(self):
         """
@@ -147,10 +149,11 @@ class Server:
                 handler()
             except Exception as exc:
                 self.logger.exception(exc)
-        for ws_group in self.websockets:
-            for ws in self.websockets[ws_group]:
-                ws.close()
-        self.app.shutdown()
+        # FIXME: websocket close on server hangs
+        # for ws_group in self.websockets:
+        #    for ws in self.websockets[ws_group]["connections"]:
+        #         await ws.close()
+        await self.app.shutdown()
 
     def run(self, address='127.0.0.1', port=2100, logger=None, debug=False):
         """
@@ -174,12 +177,14 @@ class Server:
         self.logger.debug("Closing all tasks...")
         for task in asyncio.Task.all_tasks():
             task.cancel()
-        self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
+        try:
+            self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
+        except Exception:
+            pass
         self.logger.debug("Closing the loop...")
         self.loop.close()
 
         self.logger.info('Stopped cirrina server')
-
 
     def startup(self, func):
         """
@@ -189,7 +194,6 @@ class Server:
         self.startup_handlers.append(func)
         return func
 
-
     def shutdown(self, func):
         """
         Decorator to provide one or more shutdown
@@ -198,8 +202,7 @@ class Server:
         self.shutdown_handlers.append(func)
         return func
 
-
-    ### Authentication ###
+    # Authentication
 
     def auth_handler(self, func):
         """
@@ -207,6 +210,13 @@ class Server:
         handlers.
         """
         self.auth_handlers.append(func)
+        return func
+
+    def auth_unauthorized(self, func):
+        """
+        Decorator to provide handler for unauthorized calls.
+        """
+        self.auth_unauthorized_handler = func
         return func
 
     def logout_handler(self, func):
@@ -247,28 +257,30 @@ class Server:
         produces:
         - text/plain
         responses:
-            "302":
+            "200":
                 description: successful login.
-            "405":
-                description: invalid HTTP Method
+            "400":
+                description: login failed
         """
+        try:
+            params = await request.json()
+            username = params.get('username')
+            password = params.get('password')
+        except Exception as exc:
+            self.logger.exception(exc)
+            return web.Response(status=400)
 
-        # get username and password from POST request
-        data = await request.post()
-        username = data.get('username')
-        password = data.get('password')
-
-        # check if username and password are valid
-        for auth_handler in self.auth_handlers:
-            if (await auth_handler(request, username, password)) is True:
-                self.logger.debug('User authenticated: %s', username)
-                request.cirrina.web_session['username'] = username
-                response = web.Response(status=302)
-                response.headers['Location'] = data.get('path', '/')
-                return response
-        self.logger.debug('User authentication failed: %s', username)
-        response = web.Response(status=302)
-        response.headers['Location'] = self.login_url
+        if username and password:
+            username = username.lower()
+            for auth_handler in self.auth_handlers:
+                if (await auth_handler(request, username, password)) is True:
+                    self.logger.debug('User authenticated: %s', username)
+                    request.cirrina.web_session['username'] = username
+                    response = web.Response(status=200)
+                    return response
+        self.logger.warn('User authentication failed for \'%s\'', str(username))
+        await asyncio.sleep(4)
+        response = web.Response(status=400)
         request.cirrina.web_session.invalidate()
         return response
 
@@ -290,7 +302,7 @@ class Server:
         """
 
         if not request.cirrina.web_session:
-            self.logger.debug('No valid session in request for logout')
+            self.logger.warn('No valid session in request for logout')
             return web.Response(status=200)  # FIXME: what should be returned?
 
         # run all logout handlers before invalidating session
@@ -309,12 +321,11 @@ class Server:
         @wraps(func)
         async def _wrapper(request):  # pylint: disable=missing-docstring
             if request.cirrina.web_session.new:
-                response = web.Response(status=302)
-                response.headers['Location'] = self.login_url + "?path=" + request.path_qs
-                return response
-            return (await func(request))
+                if self.auth_unauthorized_handler:
+                    return await self.auth_unauthorized_handler(request)
+                return web.Response(status=401)
+            return await func(request)
         return _wrapper
-
 
     # HTTP protocol
 
@@ -328,6 +339,10 @@ class Server:
                     self.create_context_func(request.cirrina)
                 except Exception as exc:
                     self.logger.exception(exc)
+
+            # backward compatibility to older aiohttp API
+            if not hasattr(request, "GET") and hasattr(request, "query"):
+                request.GET = request.query
 
             ret = None
             try:
@@ -450,7 +465,7 @@ class Server:
 
                     filename = filename.replace("/", "")  # no paths separators allowed
 
-                    self.logger.info("http_upload: receiving file: '%s'", filename)
+                    self.logger.debug("http_upload: receiving file: '%s'", filename)
                     size = 0
                     # ensure dir exists
                     tempfile = None
@@ -484,9 +499,9 @@ class Server:
         for ws in self.websockets[group]["connections"]:
             try:
                 if asyncio.iscoroutinefunction(ws.send_str):
-                    await ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+                    await ws.send_str(json.dumps(msg))
                 else:
-                    ws.send_str('{"status": 200, "message": %s}' % json.dumps(msg))
+                    ws.send_str(json.dumps(msg))
             except Exception as exc:
                 self.websockets[group]["connections"].remove(ws)
                 self.logger.exception(exc)
@@ -569,11 +584,12 @@ class Server:
             session = await get_session(request)
             if session.new:
                 self.logger.debug('websocket: not logged in')
+
                 if asyncio.iscoroutinefunction(ws_client.send_str):
                     await ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
                 else:
                     ws_client.send_str(json.dumps({'status': 401, 'text': "Unauthorized"}))
-                ws_client.close()
+                await ws_client.close()
                 return ws_client
 
         ws_client.cirrina = CirrinaWSContext(request, session)
@@ -588,14 +604,14 @@ class Server:
             try:
                 msg = await ws_client.receive()
                 if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
-                    self.logger.info('websocket closed')
+                    self.logger.debug('websocket closed')
                     break
 
                 self.logger.debug("websocket got: %s", msg)
                 if msg.type == WSMsgType.TEXT:
                     await self.websockets[group]["handler"](ws_client, msg.data)
                 elif msg.type == WSMsgType.ERROR:
-                    self.logger.info('websocket closed with exception %s', ws_client.exception())
+                    self.logger.error('websocket closed with exception %s', ws_client.exception())
             except futures._base.CancelledError:
                 pass
             except Exception as exc:
@@ -654,7 +670,7 @@ class Server:
                 try:
                     method = _rpc.cirrina.rpc_methods[data['method']]
                 except Exception:
-                    _rpc.cirrina.logger.error("JRPC method not found: '%s'"%data['method'])
+                    _rpc.cirrina.logger.error("JRPC method not found: '%s'" % data['method'])
                     return JError(data).method()
 
                 session = await get_session(request)
