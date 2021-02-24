@@ -607,7 +607,6 @@ class Server:
                     self.logger.debug('websocket closed')
                     break
 
-                self.logger.debug("websocket got: %s", msg)
                 if msg.type == WSMsgType.TEXT:
                     await self.websockets[group]["handler"](ws_client, msg.data)
                 elif msg.type == WSMsgType.ERROR:
