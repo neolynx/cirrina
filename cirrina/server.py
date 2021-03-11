@@ -278,7 +278,7 @@ class Server:
                     request.cirrina.web_session['username'] = username
                     response = web.Response(status=200)
                     return response
-        self.logger.warn('User authentication failed for \'%s\'', str(username))
+        self.logger.warning('User authentication failed for \'%s\'', str(username))
         await asyncio.sleep(4)
         response = web.Response(status=400)
         request.cirrina.web_session.invalidate()
@@ -302,7 +302,7 @@ class Server:
         """
 
         if not request.cirrina.web_session:
-            self.logger.warn('No valid session in request for logout')
+            self.logger.warning('No valid session in request for logout')
             return web.Response(status=200)  # FIXME: what should be returned?
 
         # run all logout handlers before invalidating session
