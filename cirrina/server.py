@@ -510,8 +510,8 @@ class Server:
         """
         Decorator for websocket message events.
         """
-        def _ws_wrapper(request):
-            return self._ws_handler(request, group)
+        async def _ws_wrapper(request):
+            return await self._ws_handler(request, group)
 
         def _wrapper(func):
             self.app.router.add_route('GET', location, _ws_wrapper)
