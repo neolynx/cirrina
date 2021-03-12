@@ -278,7 +278,7 @@ class Server:
                     request.cirrina.web_session['username'] = username
                     response = web.Response(status=200)
                     return response
-        self.logger.warn('User authentication failed for \'%s\'', str(username))
+        self.logger.warning('User authentication failed for \'%s\'', str(username))
         await asyncio.sleep(4)
         response = web.Response(status=400)
         request.cirrina.web_session.invalidate()
@@ -302,7 +302,7 @@ class Server:
         """
 
         if not request.cirrina.web_session:
-            self.logger.warn('No valid session in request for logout')
+            self.logger.warning('No valid session in request for logout')
             return web.Response(status=200)  # FIXME: what should be returned?
 
         # run all logout handlers before invalidating session
@@ -510,8 +510,8 @@ class Server:
         """
         Decorator for websocket message events.
         """
-        def _ws_wrapper(request):
-            return self._ws_handler(request, group)
+        async def _ws_wrapper(request):
+            return await self._ws_handler(request, group)
 
         def _wrapper(func):
             self.app.router.add_route('GET', location, _ws_wrapper)
