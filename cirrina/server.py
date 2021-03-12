@@ -319,12 +319,12 @@ class Server:
         executing the decorated function.
         """
         @wraps(func)
-        async def _wrapper(request):  # pylint: disable=missing-docstring
+        async def _wrapper(request, *args, **kwargs):  # pylint: disable=missing-docstring
             if request.cirrina.web_session.new:
                 if self.auth_unauthorized_handler:
                     return await self.auth_unauthorized_handler(request)
                 return web.Response(status=401)
-            return await func(request)
+            return await func(request, *args, **kwargs)
         return _wrapper
 
     # HTTP protocol
