@@ -335,34 +335,27 @@ class Server:
             session = await get_session(request)
             request.cirrina = CirrinaContext(web_session=session)
             if self.create_context_func:
-                try:
-                    self.create_context_func(request.cirrina)
-                except Exception as exc:
-                    self.logger.exception(exc)
+                # Errors raised here will result in a generic 500 error
+                self.create_context_func(request.cirrina)
 
             # backward compatibility to older aiohttp API
             if not hasattr(request, "GET") and hasattr(request, "query"):
                 request.GET = request.query
 
-            ret = None
             try:
                 if threaded:
-                    def blocking_wrappper():
+                    def blocking_wrapper():
                         # run in new loop
                         return asyncio.new_event_loop().run_until_complete(func(request))
 
-                    ret = await self.loop.run_in_executor(self.executor, blocking_wrappper)
-                else:
-                    ret = (await func(request))
-            except Exception as exc:
-                self.logger.exception(exc)
+                    return await self.loop.run_in_executor(self.executor, blocking_wrapper)
+                return await func(request)
 
-            if self.destroy_context_func:
-                try:
+            finally:
+                if self.destroy_context_func:
+                    # Errors raised here will result in a generic 500 error
                     self.destroy_context_func(request.cirrina)
-                except Exception as exc:
-                    self.logger.exception(exc)
-            return ret
+
         return _wrap
 
     def http_static(self, location, path):
