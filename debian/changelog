@@ -1,3 +1,9 @@
+cirrina (0.4.3) stable; urgency=medium
+
+  * Don't swallow exceptions in session wrapper
+
+ -- André Roth <neolynx@gmail.com>  Mon, 29 Mar 2021 20:35:27 +0000
+
 cirrina (0.4.2) stable; urgency=medium
 
   * bump version 0.4.2
