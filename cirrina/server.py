@@ -46,7 +46,10 @@ class Server:
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
 
-    def __init__(self, loop=None, login_url="/api/login", logout_url="/api/logout"):
+    def __init__(
+            self, loop=None,
+            login_url="/api/login", logout_url="/api/logout",
+            app_kws=None):
         if loop is None:
             loop = asyncio.get_event_loop()
         #: Holds the asyncio event loop which is used to handle requests.
@@ -57,7 +60,9 @@ class Server:
         self.logout_url = logout_url
 
         #: Holds the aiohttp web application instance.
-        self.app = web.Application()
+        if app_kws is None:
+            app_kws = {}
+        self.app = web.Application(**app_kws)
 
         # executor for threaded http requests
         self.executor = futures.ThreadPoolExecutor()
