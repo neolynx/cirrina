@@ -18,9 +18,12 @@
     {
         document.getElementById("loginbutton").disabled = true;
         var form = document.getElementById('loginForm');
-        var form_data = new FormData(form);
+        var data = {
+            username: form.username.value,
+            password: form.password.value
+        };
         var http = new XMLHttpRequest();
-        http.open('POST', '/login', true);
+        http.open('POST', '/api/login', true);
         http.addEventListener('load', function(event) {
            if (http.status >= 200 && http.status < 300) {
               window.location = "/";
@@ -29,7 +32,7 @@
               document.getElementById("loginbutton").disabled = false;
            }
         });
-        http.send(form_data);
+        http.send(JSON.stringify(data));
     }
     </script>
   </body>
