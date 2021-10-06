@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import os
+import sys
 from concurrent import futures
 from aiohttp import web, WSMsgType
 from aiohttp_session import setup, get_session  # , session_middleware
@@ -180,16 +181,22 @@ class Server:
 
         self.loop.run_until_complete(self._stop())
         self.logger.debug("Closing all tasks...")
-        for task in asyncio.Task.all_tasks():
+        for task in self._get_asyncio_tasks():
             task.cancel()
         try:
-            self.loop.run_until_complete(asyncio.gather(*asyncio.Task.all_tasks()))
+            self.loop.run_until_complete(asyncio.gather(*self._get_asyncio_tasks()))
         except Exception:
             pass
         self.logger.debug("Closing the loop...")
         self.loop.close()
 
         self.logger.info('Stopped cirrina server')
+
+    def _get_asyncio_tasks(self):
+        if (sys.verion_info.major, sys.verion_info.minor) < (3, 7):
+            # Deprecated in 3.7
+            return asyncio.Task.all_tasks()
+        return asyncio.all_tasks()
 
     def startup(self, func):
         """
