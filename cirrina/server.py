@@ -101,6 +101,7 @@ class Server:
         self.http_post(self.logout_url)(self._logout)
 
         self.logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+        self.access_log_class = web.AccessLogger
 
         # swagger documentation
         self.title = "Cirrina based web application"
@@ -138,6 +139,7 @@ class Server:
             self.app.make_handler(
                 access_log_format='%r %s',
                 access_log=self.logger,
+                access_log_class=self.access_log_class,
                 logger=self.logger),
             address,
             port)
@@ -161,12 +163,14 @@ class Server:
         #         await ws.close()
         await self.app.shutdown()
 
-    def run(self, address='127.0.0.1', port=2100, logger=None, debug=False):
+    def run(self, address='127.0.0.1', port=2100, logger=None, debug=False, access_log_class=None):
         """
         Run cirrina server event loop.
         """
         if logger:
             self.logger = logger
+        if access_log_class:
+            self.access_log_class = access_log_class
 
         # set cirrina logger loglevel
         self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
