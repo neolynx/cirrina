@@ -197,7 +197,7 @@ class Server:
         self.logger.info('Stopped cirrina server')
 
     def _get_asyncio_tasks(self):
-        if (sys.verion_info.major, sys.verion_info.minor) < (3, 7):
+        if (sys.version_info.major, sys.version_info.minor) < (3, 7):
             # Deprecated in 3.7
             return asyncio.Task.all_tasks()
         return asyncio.all_tasks()
