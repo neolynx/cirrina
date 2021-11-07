@@ -210,7 +210,15 @@ class Server:
             pass
         return tasks
 
+    # FIXME: to be depreciated
     def startup(self, func):
+        self.startup_handler(func)
+
+    # FIXME: to be depreciated
+    def shutdown(self, func):
+        self.shutdown_handler(func)
+
+    def startup_handler(self, func):
         """
         Decorator to provide one or more startup
         handlers.
@@ -218,7 +226,7 @@ class Server:
         self.startup_handlers.append(func)
         return func
 
-    def shutdown(self, func):
+    def shutdown_handler(self, func):
         """
         Decorator to provide one or more shutdown
         handlers.
