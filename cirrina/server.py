@@ -110,6 +110,8 @@ class Server:
         self.api_version = "0.1"
         self.contact = "André Roth <neolynx@gmail.com>"
 
+        self.waiter_event = asyncio.Event()
+
     def set_context_functions(self, create_context_func, destroy_context_func=None):
         self.create_context_func = create_context_func
         self.destroy_context_func = destroy_context_func
@@ -162,6 +164,14 @@ class Server:
         #    for ws in self.websockets[ws_group]["connections"]:
         #         await ws.close()
         await self.app.shutdown()
+        await self.app.cleanup()
+
+    async def _waiter(self):
+        await self.waiter_event.wait()
+
+    def stop(self):
+        self.waiter_event.set()
+
 
     def run(self, address='127.0.0.1', port=2100, logger=None, debug=False, access_log_class=None):
         """
@@ -179,28 +189,26 @@ class Server:
         self.logger.info("Server started at http://%s:%d", address, port)
 
         try:
-            self.loop.run_forever()
+            self.loop.run_until_complete(self._waiter())
         except KeyboardInterrupt:
             pass
 
+        # running shutdown handlers
         self.loop.run_until_complete(self._stop())
-        self.logger.debug("Closing all tasks...")
-        for task in self._get_asyncio_tasks():
-            task.cancel()
-        try:
-            self.loop.run_until_complete(asyncio.gather(*self._get_asyncio_tasks()))
-        except Exception:
-            pass
-        self.logger.debug("Closing the loop...")
-        self.loop.close()
 
-        self.logger.info('Stopped cirrina server')
+
+        self.logger.debug('Stopped cirrina server')
 
     def _get_asyncio_tasks(self):
-        if (sys.version_info.major, sys.version_info.minor) < (3, 7):
-            # Deprecated in 3.7
-            return asyncio.Task.all_tasks()
-        return asyncio.all_tasks()
+        tasks = []
+        try:
+            if (sys.version_info.major, sys.version_info.minor) < (3, 7):
+                # Deprecated in 3.7
+                tasks = asyncio.Task.all_tasks()
+            tasks = asyncio.all_tasks()
+        except RuntimeError:
+            pass
+        return tasks
 
     def startup(self, func):
         """
