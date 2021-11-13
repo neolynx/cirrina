@@ -1,3 +1,9 @@
+cirrina (0.4.7.2) stable; urgency=medium
+
+  * bump version 0.4.7.2
+
+ -- André Roth <neolynx@gmail.com>  Sat, 13 Nov 2021 22:09:20 +0000
+
 cirrina (0.4.7.1) stable; urgency=medium
 
   * bump version 0.4.7.1
