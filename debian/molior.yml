@@ -3,7 +3,6 @@ targets:
   molior:
   - '1.4-next'
 build_after:
-  - "aiohttp-session"
   - "aiohttp-swagger"
   - "aiohttp_jrpc"
 
