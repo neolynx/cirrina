@@ -1,3 +1,10 @@
+cirrina (0.4.7.3) stable; urgency=medium
+
+  * build for 1.5
+  * drop jrpc
+
+ -- André Roth <andre.roth@roche.com>  Sat, 18 Mar 2023 15:49:49 +0100
+
 cirrina (0.4.7.2) stable; urgency=medium
 
   * bump version 0.4.7.2
