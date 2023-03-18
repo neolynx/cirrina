@@ -1,3 +1,9 @@
+cirrina (0.4.7.4) stable; urgency=medium
+
+  * remove RPCClient
+
+ -- André Roth <andre.roth@roche.com>  Sat, 18 Mar 2023 18:15:13 +0100
+
 cirrina (0.4.7.3) stable; urgency=medium
 
   * build for 1.5
