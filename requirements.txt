@@ -1,5 +1,4 @@
 aiohttp
 aiohttp_session
-aiohttp-jrpc
 cryptography
 aiohttp_swagger
