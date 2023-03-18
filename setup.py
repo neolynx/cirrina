@@ -32,7 +32,6 @@ setup(
     install_requires=[
         'aiohttp',
         'aiohttp_session',
-        'aiohttp-jrpc',
         'cryptography'
     ],
 

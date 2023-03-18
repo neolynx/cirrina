@@ -22,9 +22,6 @@ app.static("/static", Server.DEFAULT_STATIC_PATH)
 # enable websocket communication
 app.enable_websockets()
 
-# enable JSON RPC communication
-app.enable_rpc('/jrpc')
-
 if __name__ == '__main__':
     app.run('0.0.0.0')
 ```

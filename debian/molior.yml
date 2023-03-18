@@ -4,5 +4,4 @@ targets:
   - '1.4-next'
 build_after:
   - "aiohttp-swagger"
-  - "aiohttp_jrpc"
 

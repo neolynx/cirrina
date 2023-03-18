@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 #: Create cirrina app.
 app = cirrina.Server()
-app.enable_rpc('/jrpc')
 wspath = '/ws'
 
 
@@ -151,15 +150,6 @@ async def default(request):
 ''' % (wspath, visit_count)
     resp = web.Response(text=html, content_type="text/html")
     return resp
-
-
-@app.jrpc
-async def hello(request, session, msg, n, debug=False):
-    logger.info("jrpc hello called: %s - %d, debug: %d", msg, n, debug)
-    visit_count = session['visit_count'] if 'visit_count' in session else 1
-    session['visit_count'] = visit_count + 1
-    app.websocket_broadcast(msg)
-    return {"status": msg, 'visit_count': visit_count - 1}
 
 
 @app.startup

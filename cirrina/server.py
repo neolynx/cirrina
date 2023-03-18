@@ -16,7 +16,6 @@ from concurrent import futures
 from aiohttp import web, WSMsgType
 from aiohttp_session import setup, get_session  # , session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from aiohttp_jrpc import JError, JResponse, decode, InternalError, InvalidRequest, ParseError
 from aiohttp_swagger import setup_swagger
 from collections.abc import Callable
 from cryptography import fernet
@@ -667,70 +666,3 @@ class Server:
             self.logger.exception(exc)
 
         return ws_client
-
-    # JRPC protocol
-
-    def enable_rpc(self, location):
-        """
-        Register new JSON RPC method.
-        """
-        self.app.router.add_route('POST', location, self._rpc_handler())
-
-    def jrpc(self, func):
-        """
-        Register RPC method
-        """
-        self.rpc_methods[func.__name__] = func
-        return func
-
-    def _rpc_handler(self):
-        """
-        Handle rpc calls.
-        """
-        class _rpc(object):
-            cirrina = self
-
-            def __new__(cls, request):
-                """ Return on call class """
-                return cls.__run(cls, request)
-
-            async def __run(self, request):
-                """ Run service """
-                _rpc.cirrina.logger.debug("RPC call")
-                try:
-                    data = await decode(request)
-                except ParseError:
-                    _rpc.cirrina.logger.error('JRPC parse error')
-                    return JError().parse()
-                except InvalidRequest:
-                    _rpc.cirrina.logger.error('JRPC invalid request')
-                    return JError().request()
-                except InternalError:
-                    _rpc.cirrina.logger.error('JRPC internal error')
-                    return JError().internal()
-
-                try:
-                    method = _rpc.cirrina.rpc_methods[data['method']]
-                except Exception:
-                    _rpc.cirrina.logger.error("JRPC method not found: '%s'" % data['method'])
-                    return JError(data).method()
-
-                session = await get_session(request)
-                try:
-                    resp = await method(request, session, *data['params']['args'], **data['params']['kw'])
-                except TypeError as e:
-                    # workaround for JError.custom bug
-                    _rpc.cirrina.logger.error('JRPC argument type error')
-                    return JResponse(jsonrpc={
-                        'id': data['id'],
-                        'error': {'code': -32602, 'message': str(e)},
-                    })
-                except InternalError:
-                    _rpc.cirrina.logger.error('JRPC internal error')
-                    return JError(data).internal()
-
-                return JResponse(jsonrpc={
-                    "id": data['id'], "result": resp
-                    })
-
-        return _rpc
