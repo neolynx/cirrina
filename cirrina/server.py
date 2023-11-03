@@ -12,15 +12,17 @@ import json
 import logging
 import os
 import sys
+import tempfile
 from concurrent import futures
 from aiohttp import web, WSMsgType
-from aiohttp_session import setup, get_session  # , session_middleware
+from aiohttp_session import setup, get_session 
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
+from aiohttp_session_file import FileStorage
 from aiohttp_swagger import setup_swagger
 from collections.abc import Callable
 from cryptography import fernet
 from functools import wraps
-from tempfile import NamedTemporaryFile
+from enum import Enum
 
 
 class CirrinaContext:
@@ -45,11 +47,18 @@ class Server:
     """
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
+    class SessionType(Enum):
+        ENCRYPTED_COOKIE = 1
+        FILE = 2
+
 
     def __init__(
             self, loop=None,
             login_url="/api/login", logout_url="/api/logout",
-            app_kws=None):
+            app_kws=None,
+            session_type=SessionType.ENCRYPTED_COOKIE,
+            session_dir=tempfile.mkdtemp(prefix='cirrina-session-'),
+            session_max_age=3600 * 24 * 7): # 1 week
         if loop is None:
             loop = asyncio.get_event_loop()
         #: Holds the asyncio event loop which is used to handle requests.
@@ -76,10 +85,13 @@ class Server:
         #: Holds all registered RPC methods.
         self.rpc_methods = {}
 
-        # setup cookie encryption for user sessions.
-        fernet_key = fernet.Fernet.generate_key()
-        secret_key = base64.urlsafe_b64decode(fernet_key)
-        setup(self.app, EncryptedCookieStorage(secret_key))
+        # setup session
+        if session_type == Server.SessionType.ENCRYPTED_COOKIE:
+            fernet_key = fernet.Fernet.generate_key()
+            secret_key = base64.urlsafe_b64decode(fernet_key)
+            setup(self.app, EncryptedCookieStorage(secret_key))
+        elif session_type == Server.SessionType.FILE:
+            setup(self.app, FileStorage(session_dir, max_age=session_max_age))
 
         #: Holds authentication functions
         self.auth_handlers = []
@@ -511,7 +523,7 @@ class Server:
                     size = 0
                     # ensure dir exists
                     tempfile = None
-                    with NamedTemporaryFile(dir=upload_dir, prefix=filename + ".", delete=False) as f:
+                    with tempfile.NamedTemporaryFile(dir=upload_dir, prefix=filename + ".", delete=False) as f:
                         tempfile = f.name
                         while True:
                             chunk = await part.read_chunk()  # 8192 bytes by default.
