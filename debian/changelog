@@ -1,3 +1,10 @@
+cirrina (0.4.7.5) stable; urgency=medium
+
+  * build for bookworm
+  * allow file based sessions
+
+ -- André Roth <neolynx@gmail.com>  Fri, 03 Nov 2023 16:03:32 +0000
+
 cirrina (0.4.7.4) stable; urgency=medium
 
   * remove RPCClient
