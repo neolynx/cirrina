@@ -1,3 +1,9 @@
+cirrina (0.4.7.8) stable; urgency=medium
+
+  * server: raise walk errors
+
+ -- André Roth <neolynx@gmail.com>  Mon, 06 Nov 2023 23:39:53 +0100
+
 cirrina (0.4.7.7) stable; urgency=medium
 
   * server: allow to invalidate all aiohttp sessions for file sessions
