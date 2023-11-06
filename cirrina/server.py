@@ -47,6 +47,7 @@ class Server:
     """
 
     DEFAULT_STATIC_PATH = os.path.join(os.path.dirname(__file__), 'static')
+
     class SessionType(Enum):
         ENCRYPTED_COOKIE = 1
         FILE = 2
@@ -60,16 +61,16 @@ class Server:
             session_max_age=3600 * 24 * 7):  # 1 week
         if loop is None:
             loop = asyncio.get_event_loop()
-        #: Holds the asyncio event loop which is used to handle requests.
         self.loop = loop
-
-        # remember the login/logout urls
         self.login_url = login_url
         self.logout_url = logout_url
+        self.session_type = session_type
+        self.session_dir = session_dir
 
-        #: Holds the aiohttp web application instance.
         if app_kws is None:
             app_kws = {}
+
+        # Holds the aiohttp web application instance.
         self.app = web.Application(**app_kws)
 
         # executor for threaded http requests
@@ -85,11 +86,11 @@ class Server:
         self.rpc_methods = {}
 
         # setup session
-        if session_type == Server.SessionType.ENCRYPTED_COOKIE:
+        if self.session_type == Server.SessionType.ENCRYPTED_COOKIE:
             fernet_key = fernet.Fernet.generate_key()
             secret_key = base64.urlsafe_b64decode(fernet_key)
             setup(self.app, EncryptedCookieStorage(secret_key))
-        elif session_type == Server.SessionType.FILE:
+        elif self.session_type == Server.SessionType.FILE:
             setup(self.app, FileStorage(session_dir, max_age=session_max_age))
 
         #: Holds authentication functions
@@ -182,7 +183,6 @@ class Server:
     def stop(self):
         self.waiter_event.set()
 
-
     def run(self, address='127.0.0.1', port=2100, logger=None, debug=False, access_log_class=None):
         """
         Run cirrina server event loop.
@@ -205,7 +205,6 @@ class Server:
 
         # running shutdown handlers
         self.loop.run_until_complete(self._stop())
-
 
         self.logger.debug('Stopped cirrina server')
 
@@ -386,6 +385,14 @@ class Server:
                     return web.Response(status=401)
             return await func(request, *args, **kwargs)
         return _wrapper
+
+    def invalidate_sessions(self):
+        if self.session_type == Server.SessionType.FILE:
+            for root, dirs, files in os.walk(self.session_dir):
+                for f in files:
+                    os.unlink(os.path.join(root, f))
+        else:
+            raise Exception(f"Cannot invelidate sessions of type {self.session_type}")
 
     # HTTP protocol
 
