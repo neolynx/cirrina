@@ -15,7 +15,7 @@ import sys
 import tempfile
 from concurrent import futures
 from aiohttp import web, WSMsgType
-from aiohttp_session import setup, get_session 
+from aiohttp_session import setup, get_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_session_file import FileStorage
 from aiohttp_swagger import setup_swagger
@@ -51,14 +51,13 @@ class Server:
         ENCRYPTED_COOKIE = 1
         FILE = 2
 
-
     def __init__(
             self, loop=None,
             login_url="/api/login", logout_url="/api/logout",
             app_kws=None,
             session_type=SessionType.ENCRYPTED_COOKIE,
             session_dir=tempfile.mkdtemp(prefix='cirrina-session-'),
-            session_max_age=3600 * 24 * 7): # 1 week
+            session_max_age=3600 * 24 * 7):  # 1 week
         if loop is None:
             loop = asyncio.get_event_loop()
         #: Holds the asyncio event loop which is used to handle requests.
@@ -522,16 +521,16 @@ class Server:
                     self.logger.debug("http_upload: receiving file: '%s'", filename)
                     size = 0
                     # ensure dir exists
-                    tempfile = None
+                    tmpfile = None
                     with tempfile.NamedTemporaryFile(dir=upload_dir, prefix=filename + ".", delete=False) as f:
-                        tempfile = f.name
+                        tmpfile = f.name
                         while True:
                             chunk = await part.read_chunk()  # 8192 bytes by default.
                             if not chunk:
                                 break
                             size += len(chunk)
                             f.write(chunk)
-                    return await func(request, tempfile, filename, size)
+                    return await func(request, tmpfile, filename, size)
                 self.logger.error("http_upload: multipart field '%s' not found", field)
 
             self.app.router.add_route('POST', location, self._session_wrapper(upload_handler))
