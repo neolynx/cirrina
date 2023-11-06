@@ -388,7 +388,9 @@ class Server:
 
     def invalidate_sessions(self):
         if self.session_type == Server.SessionType.FILE:
-            for root, dirs, files in os.walk(self.session_dir):
+            def walkerror(e):
+                raise(e)
+            for root, dirs, files in os.walk(self.session_dir, onerror=walkerror):
                 for f in files:
                     os.unlink(os.path.join(root, f))
         else:
