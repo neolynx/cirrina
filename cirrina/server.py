@@ -58,7 +58,7 @@ class Server:
             app_kws=None,
             session_type=SessionType.ENCRYPTED_COOKIE,
             session_dir=tempfile.mkdtemp(prefix='cirrina-session-'),
-            session_max_age=3600 * 24 * 7):  # 1 week
+            session_max_age=1800):  # 30mins (only for file sessions)
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
@@ -86,10 +86,12 @@ class Server:
         self.rpc_methods = {}
 
         # setup session
+        self.encrypted_cookie_session = None
         if self.session_type == Server.SessionType.ENCRYPTED_COOKIE:
             fernet_key = fernet.Fernet.generate_key()
             secret_key = base64.urlsafe_b64decode(fernet_key)
-            setup(self.app, EncryptedCookieStorage(secret_key))
+            self.encrypted_cookie_session = EncryptedCookieStorage(secret_key)
+            setup(self.app, self.encrypted_cookie_session)
         elif self.session_type == Server.SessionType.FILE:
             setup(self.app, FileStorage(session_dir, max_age=session_max_age))
 
@@ -394,7 +396,9 @@ class Server:
                 for f in files:
                     os.unlink(os.path.join(root, f))
         else:
-            raise Exception(f"Cannot invelidate sessions of type {self.session_type}")
+            # reset secret key
+            fernet_key = fernet.Fernet.generate_key()
+            self.encrypted_cookie_session._fernet = fernet.Fernet(fernet_key)
 
     # HTTP protocol
 
