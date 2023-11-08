@@ -1,3 +1,9 @@
+cirrina (0.4.7.9) stable; urgency=medium
+
+  * server: invalidate also encrypted cookie sessions
+
+ -- André Roth <neolynx@gmail.com>  Wed, 08 Nov 2023 21:49:02 +0100
+
 cirrina (0.4.7.8) stable; urgency=medium
 
   * server: raise walk errors
