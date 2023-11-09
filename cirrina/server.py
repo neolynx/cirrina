@@ -762,6 +762,8 @@ class Server:
                 msg = await ws_client.receive()
                 if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
                     self.logger.debug('websocket proxy connection to websocket closed')
+                    await ws_client.close()
+                    up = False
                     break
 
                 if msg.type == WSMsgType.BINARY:
