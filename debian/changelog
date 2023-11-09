@@ -1,3 +1,9 @@
+cirrina (0.4.7.10) stable; urgency=medium
+
+  * server: support websocket tcp proxy
+
+ -- André Roth <neolynx@gmail.com>  Thu, 09 Nov 2023 08:59:14 +0100
+
 cirrina (0.4.7.9) stable; urgency=medium
 
   * server: invalidate also encrypted cookie sessions
