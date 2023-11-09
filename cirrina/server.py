@@ -745,7 +745,7 @@ class Server:
                 self.port = port
 
             def connection_made(self, transport):
-                self.cirrina.logger.debug(f"websocket proxy connected to {self.host}:{self.port}")
+                self.cirrina.logger.info(f"websocket proxy to {self.host}:{self.port} connected")
 
             def data_received(self, data):
                 self.cirrina.loop.call_soon_threadsafe(queue.put_nowait, (data))
@@ -762,7 +762,6 @@ class Server:
                 msg = await ws_client.receive()
                 if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
                     self.logger.debug('websocket proxy connection to websocket closed')
-                    await ws_client.close()
                     up = False
                     break
 
@@ -771,7 +770,6 @@ class Server:
                         transport.write(msg.data)
                     except Exception:
                         self.logger.error("tcpproxy: error sending to tcp connection")
-                        await ws_client.close()
                         up = False
                 elif msg.type == WSMsgType.ERROR:
                     self.logger.error('tcpproxy closed with exception %s', ws_client.exception())
@@ -780,5 +778,8 @@ class Server:
             except Exception as exc:
                 self.logger.exception(exc)
 
+        await ws_client.close()
+        transport.close()
         self.tcpsockets[group]["connections"].remove(ws_client)
+        self.logger.info(f"websocket proxy to {host}:{port} closed")
         return ws_client
