@@ -82,6 +82,9 @@ class Server:
         #: Holds all websocket handler information.
         self.websockets = {}
 
+        #: Holds all tcp websocket proxy handler information.
+        self.tcpsockets = {}
+
         #: Holds all registered RPC methods.
         self.rpc_methods = {}
 
@@ -689,4 +692,91 @@ class Server:
             self.logger.error("websocket: error in disconnect event handler")
             self.logger.exception(exc)
 
+        return ws_client
+
+    # websocket tcp proxy
+
+    def tcp_proxy(self, location, group="main", authenticated=True, host="127.0.0.1", port=5900):
+        async def _wsproxy_wrapper(request):
+            return await self._wsproxy_handler(request, group)
+
+        if group not in self.tcpsockets:
+            self.tcpsockets[group] = {}
+        self.tcpsockets[group]["authenticated"] = authenticated
+        self.tcpsockets[group]["host"] = host
+        self.tcpsockets[group]["port"] = port
+        self.tcpsockets[group]["connections"] = []
+        self.app.router.add_get(location, _wsproxy_wrapper)
+
+    async def _wsproxy_handler(self, request, group):
+        session = None
+        up = True
+        queue = asyncio.Queue()
+
+        if self.tcpsockets[group]["authenticated"]:
+            session = await get_session(request)
+            if session.new:
+                self.logger.error('tcpproxy: not logged in')
+                return web.Response(status=401)
+
+        ws_client = web.WebSocketResponse(protocols=['binary', 'base64'])
+        await ws_client.prepare(request)
+
+        ws_client.cirrina = CirrinaWSContext(request, session)
+        self.tcpsockets[group]["connections"].append(ws_client)
+
+        async def worker():
+            nonlocal up
+            while up:
+                data = await queue.get()
+                try:
+                    await ws_client.send_bytes(data)
+                except Exception:
+                    self.logger.error("tcpproxy: error sending to websocket")
+                    await ws_client.close()
+                    up = False
+
+        asyncio.ensure_future(worker())
+
+        class TCPProxyProtocol(asyncio.Protocol):
+            def __init__(self, cirrina, host, port):
+                self.cirrina = cirrina
+                self.host = host
+                self.port = port
+
+            def connection_made(self, transport):
+                self.cirrina.logger.debug(f"websocket proxy connected to {self.host}:{self.port}")
+
+            def data_received(self, data):
+                self.cirrina.loop.call_soon_threadsafe(queue.put_nowait, (data))
+
+            def connection_lost(self, exc):
+                self.cirrina.logger.debug(f"websocket proxy connection to {self.host}:{self.port} closed")
+
+        host = self.tcpsockets[group]["host"]
+        port = self.tcpsockets[group]["port"]
+        transport, protocol = await self.loop.create_connection(lambda: TCPProxyProtocol(self, host, port), host, port)
+
+        while up:
+            try:
+                msg = await ws_client.receive()
+                if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
+                    self.logger.debug('websocket proxy connection to websocket closed')
+                    break
+
+                if msg.type == WSMsgType.BINARY:
+                    try:
+                        transport.write(msg.data)
+                    except Exception:
+                        self.logger.error("tcpproxy: error sending to tcp connection")
+                        await ws_client.close()
+                        up = False
+                elif msg.type == WSMsgType.ERROR:
+                    self.logger.error('tcpproxy closed with exception %s', ws_client.exception())
+            except futures._base.CancelledError:
+                pass
+            except Exception as exc:
+                self.logger.exception(exc)
+
+        self.tcpsockets[group]["connections"].remove(ws_client)
         return ws_client
