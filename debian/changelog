@@ -1,3 +1,9 @@
+cirrina (0.5.0~alpha1) stable; urgency=medium
+
+  * inherit from Application
+
+ -- André Roth <neolynx@gmail.com>  Sun, 26 Nov 2023 14:05:08 +0100
+
 cirrina (0.4.7.11) stable; urgency=medium
 
   * server: websocket proxy cleanup
