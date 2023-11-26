@@ -41,7 +41,7 @@ class CirrinaWSContext():
         self.web_session = session
 
 
-class Server:
+class Server(web.Application):
     """
     cirrina Server implementation.
     """
@@ -53,15 +53,13 @@ class Server:
         FILE = 2
 
     def __init__(
-            self, loop=None,
+            self,  # loop=None,
             login_url="/api/login", logout_url="/api/logout",
-            app_kws=None,
+            app_kws={},
             session_type=SessionType.ENCRYPTED_COOKIE,
             session_dir=tempfile.mkdtemp(prefix='cirrina-session-'),
             session_max_age=1800):  # 30mins (only for file sessions)
-        if loop is None:
-            loop = asyncio.get_event_loop()
-        self.loop = loop
+        super().__init__(**app_kws)
         self.login_url = login_url
         self.logout_url = logout_url
         self.session_type = session_type
@@ -70,8 +68,6 @@ class Server:
         if app_kws is None:
             app_kws = {}
 
-        # Holds the aiohttp web application instance.
-        self.app = web.Application(**app_kws)
 
         # executor for threaded http requests
         self.executor = futures.ThreadPoolExecutor()
@@ -94,9 +90,9 @@ class Server:
             fernet_key = fernet.Fernet.generate_key()
             secret_key = base64.urlsafe_b64decode(fernet_key)
             self.encrypted_cookie_session = EncryptedCookieStorage(secret_key)
-            setup(self.app, self.encrypted_cookie_session)
+            setup(self, self.encrypted_cookie_session)
         elif self.session_type == Server.SessionType.FILE:
-            setup(self.app, FileStorage(session_dir, max_age=session_max_age))
+            setup(self, FileStorage(session_dir, max_age=session_max_age))
 
         #: Holds authentication functions
         self.auth_handlers = []
@@ -128,6 +124,14 @@ class Server:
 
         self.waiter_event = asyncio.Event()
 
+        # setup API documentation
+        setup_swagger(self,
+                      description=self.description,
+                      title=self.title,
+                      api_version=self.api_version,
+                      contact=self.contact)
+
+
     def set_context_functions(self, create_context_func, destroy_context_func=None):
         self.create_context_func = create_context_func
         self.destroy_context_func = destroy_context_func
@@ -140,13 +144,6 @@ class Server:
         the aiohttp web application.:
         """
 
-        # setup API documentation
-        setup_swagger(self.app,
-                      description=self.description,
-                      title=self.title,
-                      api_version=self.api_version,
-                      contact=self.contact)
-
         for handler in self.startup_handlers:
             try:
                 handler()
@@ -154,7 +151,7 @@ class Server:
                 self.logger.exception(exc)
 
         self.srv = await self.loop.create_server(
-            self.app.make_handler(
+            self.make_handler(
                 access_log_format='%r %s',
                 access_log=self.logger,
                 access_log_class=self.access_log_class,
@@ -179,8 +176,8 @@ class Server:
         # for ws_group in self.websockets:
         #    for ws in self.websockets[ws_group]["connections"]:
         #         await ws.close()
-        await self.app.shutdown()
-        await self.app.cleanup()
+        await self.shutdown()
+        await self.cleanup()
 
     async def _waiter(self):
         await self.waiter_event.wait()
@@ -223,14 +220,6 @@ class Server:
         except RuntimeError:
             pass
         return tasks
-
-    # FIXME: to be depreciated
-    def startup(self, func):
-        self.startup_handler(func)
-
-    # FIXME: to be depreciated
-    def shutdown(self, func):
-        self.shutdown_handler(func)
 
     def startup_handler(self, func):
         """
@@ -438,14 +427,15 @@ class Server:
         """
         Register new route to static path.
         """
-        self.app.router.add_static(location, path)
+        self.router.add_static(location, path)
 
     def http_get(self, location, threaded=False):
         """
         Register HTTP GET route.
         """
+        self.logger.info(f"adding GET {location}")
         def _wrapper(func):
-            self.app.router.add_route('GET', location, self._session_wrapper(func, threaded))
+            self.router.add_route('GET', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
@@ -454,7 +444,7 @@ class Server:
         Register HTTP HEAD route.
         """
         def _wrapper(func):
-            self.app.router.add_route('HEAD', location, self._session_wrapper(func, threaded))
+            self.router.add_route('HEAD', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
@@ -463,7 +453,7 @@ class Server:
         Register HTTP OPTIONS route.
         """
         def _wrapper(func):
-            self.app.router.add_route('OPTIONS', location, self._session_wrapper(func, threaded))
+            self.router.add_route('OPTIONS', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
@@ -472,7 +462,7 @@ class Server:
         Register HTTP POST route.
         """
         def _wrapper(func):
-            self.app.router.add_route('POST', location, self._session_wrapper(func, threaded))
+            self.router.add_route('POST', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
@@ -481,7 +471,7 @@ class Server:
         Register HTTP PUT route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PUT', location, self._session_wrapper(func, threaded))
+            self.router.add_route('PUT', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
@@ -490,7 +480,7 @@ class Server:
         Register HTTP PATCH route.
         """
         def _wrapper(func):
-            self.app.router.add_route('PATCH', location, self._session_wrapper(func, threaded))
+            self.router.add_route('PATCH', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
@@ -499,7 +489,7 @@ class Server:
         Register HTTP DELETE route.
         """
         def _wrapper(func):
-            self.app.router.add_route('DELETE', location, self._session_wrapper(func, threaded))
+            self.router.add_route('DELETE', location, self._session_wrapper(func, threaded))
             return func
         return _wrapper
 
@@ -549,7 +539,7 @@ class Server:
                     return await func(request, tmpfile, filename, size)
                 self.logger.error("http_upload: multipart field '%s' not found", field)
 
-            self.app.router.add_route('POST', location, self._session_wrapper(upload_handler))
+            self.router.add_route('POST', location, self._session_wrapper(upload_handler))
             return upload_handler
         return _wrapper
 
@@ -583,7 +573,7 @@ class Server:
             return await self._ws_handler(request, group)
 
         def _wrapper(func):
-            self.app.router.add_route('GET', location, _ws_wrapper)
+            self.router.add_route('GET', location, _ws_wrapper)
             if group not in self.websockets:
                 self.websockets[group] = {}
             if "handler" in self.websockets[group]:
@@ -706,7 +696,7 @@ class Server:
         self.tcpsockets[group]["host"] = host
         self.tcpsockets[group]["port"] = port
         self.tcpsockets[group]["connections"] = []
-        self.app.router.add_get(location, _wsproxy_wrapper)
+        self.router.add_get(location, _wsproxy_wrapper)
 
     async def _wsproxy_handler(self, request, group):
         session = None
