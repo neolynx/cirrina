@@ -150,7 +150,8 @@ class Server(web.Application):
             except Exception as exc:
                 self.logger.exception(exc)
 
-        self.srv = await self.loop.create_server(
+        loop = asyncio.get_event_loop()
+        self.srv = await loop.create_server(
             self.make_handler(
                 access_log_format='%r %s',
                 access_log=self.logger,
@@ -197,16 +198,17 @@ class Server(web.Application):
         # set cirrina logger loglevel
         self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
 
-        self.loop.run_until_complete(self._start(address, port))
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self._start(address, port))
         self.logger.info("Server started at http://%s:%d", address, port)
 
         try:
-            self.loop.run_until_complete(self._waiter())
+            loop.run_until_complete(self._waiter())
         except KeyboardInterrupt:
             pass
 
         # running shutdown handlers
-        self.loop.run_until_complete(self._stop())
+        loop.run_until_complete(self._stop())
 
         self.logger.debug('Stopped cirrina server')
 
