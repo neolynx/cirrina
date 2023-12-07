@@ -7,5 +7,5 @@ Standards-Version: 3.9.7
 
 Package: python3-cirrina
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python3-cryptography, python3-aiohttp, python3-aiohttp-session, python3-aiohttp-swagger, python3-aiohttp-session-file
+Depends: ${misc:Depends}, ${python:Depends}, python3-cryptography, python3-aiohttp, python3-aiohttp-session, python3-aiohttp-swagger, python3-aiohttp-session-file, python3-aiohttp-session-file
 Description: Opinionated asynchronous web framework based on aiohttp
