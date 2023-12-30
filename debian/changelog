@@ -1,3 +1,9 @@
+cirrina (0.5.0~alpha3) stable; urgency=medium
+
+  * debian: add build order dependency
+
+ -- André Roth <neolynx@gmail.com>  Sat, 30 Dec 2023 13:56:16 +0100
+
 cirrina (0.5.0~alpha2) stable; urgency=medium
 
   * build for molior 1.5
