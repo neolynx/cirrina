@@ -68,7 +68,6 @@ class Server(web.Application):
         if app_kws is None:
             app_kws = {}
 
-
         # executor for threaded http requests
         self.executor = futures.ThreadPoolExecutor()
 
