@@ -173,10 +173,8 @@ class Server(web.Application):
                 handler()
             except Exception as exc:
                 self.logger.exception(exc)
-        # FIXME: websocket close on server hangs
-        # for ws_group in self.websockets:
-        #    for ws in self.websockets[ws_group]["connections"]:
-        #         await ws.close()
+
+        await self.close_websocket_connections()
         await self.shutdown()
         await self.cleanup()
 
@@ -393,6 +391,11 @@ class Server(web.Application):
             # reset secret key
             fernet_key = fernet.Fernet.generate_key()
             self.encrypted_cookie_session._fernet = fernet.Fernet(fernet_key)
+
+    async def close_websocket_connections(self):
+        for ws_group in self.websockets:
+            for ws in self.websockets[ws_group]["connections"]:
+                await ws.close()
 
     # HTTP protocol
 
@@ -664,11 +667,14 @@ class Server(web.Application):
         while True:
             try:
                 msg = await ws_client.receive()
+
                 if msg.type == WSMsgType.CLOSE or msg.type == WSMsgType.CLOSED:
                     self.logger.debug('websocket closed')
                     break
-
-                if msg.type == WSMsgType.TEXT:
+                elif msg.type == WSMsgType.CLOSING:
+                    self.logger.debug('websocket closing')
+                    break
+                elif msg.type == WSMsgType.TEXT:
                     await self.websockets[group]["handler"](ws_client, msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     self.logger.error('websocket closed with exception %s', ws_client.exception())
@@ -783,8 +789,11 @@ class Server(web.Application):
                     self.logger.debug('websocket proxy connection to websocket closed')
                     up = False
                     break
-
-                if msg.type == WSMsgType.BINARY:
+                elif msg.type == WSMsgType.CLOSING:
+                    self.logger.debug('websocket proxy connection to websocket closing')
+                    up = False
+                    break
+                elif msg.type == WSMsgType.BINARY:
                     try:
                         transport.write(msg.data)
                     except Exception:
