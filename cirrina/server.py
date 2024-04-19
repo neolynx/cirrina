@@ -21,8 +21,9 @@ from aiohttp_session_file import FileStorage
 from aiohttp_swagger import setup_swagger
 from collections.abc import Callable
 from cryptography import fernet
-from functools import wraps
+from functools import wraps, partial
 from enum import Enum
+from typing import Union
 
 
 class CirrinaContext:
@@ -687,33 +688,51 @@ class Server(web.Application):
 
     # websocket tcp proxy
 
-    def tcp_proxy(self, location, group="main", authenticated=True, host="127.0.0.1", port=5900):
-        async def _wsproxy_wrapper(request):
-            return await self._wsproxy_handler(request, group)
+    def tcp_proxy(self, location, group="main", authenticated: Union[Callable[[web.Request], bool],bool]=True, host="127.0.0.1", port=5900):
+        def _wrapper(func):
+            async def _wsproxy_wrapper(request) -> web.Response:
+                return await self._wsproxy_handler(request, group, func)
 
-        if group not in self.tcpsockets:
-            self.tcpsockets[group] = {}
-        self.tcpsockets[group]["authenticated"] = authenticated
-        self.tcpsockets[group]["host"] = host
-        self.tcpsockets[group]["port"] = port
-        self.tcpsockets[group]["connections"] = []
-        self.router.add_get(location, _wsproxy_wrapper)
+            if group not in self.tcpsockets:
+                self.tcpsockets[group] = {}
 
-    async def _wsproxy_handler(self, request, group):
+            self.tcpsockets[group]["authenticated"] = authenticated
+            self.tcpsockets[group]["host"] = host
+            self.tcpsockets[group]["port"] = port
+            self.tcpsockets[group]["connections"] = []
+            self.router.add_get(location, _wsproxy_wrapper)
+
+        return _wrapper
+
+    async def _wsproxy_handler(self, request, group, prepare: Callable[[web.Request], None]) -> web.Response:
+        self.logger.error("Incoming websocket request")
+
         session = None
         up = True
         queue = asyncio.Queue()
+        handlers = {}
 
-        if self.tcpsockets[group]["authenticated"]:
+        if callable(self.tcpsockets[group]["authenticated"]):
             session = await get_session(request)
+
+            if not self.tcpsockets[group]["authenticated"](request):
+                self.logger.error('tcpproxy: not logged in')
+                return web.Response(status=401)
+        elif bool(self.tcpsockets[group]["authenticated"]):
+            session = await get_session(request)
+
             if session.new:
                 self.logger.error('tcpproxy: not logged in')
                 return web.Response(status=401)
+
+        if prepare is not None:
+            handlers = {e: partial(h, request) for e, h in (await prepare(request)).items()}
 
         ws_client = web.WebSocketResponse(protocols=['binary', 'base64'])
         await ws_client.prepare(request)
 
         ws_client.cirrina = CirrinaWSContext(request, session)
+
         self.tcpsockets[group]["connections"].append(ws_client)
 
         async def worker():
@@ -730,13 +749,18 @@ class Server(web.Application):
         asyncio.ensure_future(worker())
 
         class TCPProxyProtocol(asyncio.Protocol):
-            def __init__(self, cirrina, host, port):
+            def __init__(self, cirrina, host, port, handlers):
                 self.cirrina = cirrina
                 self.host = host
                 self.port = port
+                self.handlers = handlers
 
             def connection_made(self, transport):
                 self.cirrina.logger.info(f"websocket proxy to {self.host}:{self.port} connected")
+
+                if "connect" in self.handlers:
+                    self.handlers["connect"]()
+
 
             def data_received(self, data):
                 self.cirrina.loop.call_soon_threadsafe(queue.put_nowait, (data))
@@ -744,9 +768,12 @@ class Server(web.Application):
             def connection_lost(self, exc):
                 self.cirrina.logger.debug(f"websocket proxy connection to {self.host}:{self.port} closed")
 
+                if "disconnect" in self.handlers:
+                    self.handlers["disconnect"]()
+
         host = self.tcpsockets[group]["host"]
         port = self.tcpsockets[group]["port"]
-        transport, protocol = await self.loop.create_connection(lambda: TCPProxyProtocol(self, host, port), host, port)
+        transport, protocol = await self.loop.create_connection(lambda: TCPProxyProtocol(self, host, port, handlers), host, port)
 
         while up:
             try:
@@ -772,5 +799,11 @@ class Server(web.Application):
         await ws_client.close()
         transport.close()
         self.tcpsockets[group]["connections"].remove(ws_client)
+
         self.logger.info(f"websocket proxy to {host}:{port} closed")
         return ws_client
+
+    async def close_tcp_proxy_connections(self, group="main", isMatching = lambda r: True):
+        for c in self.tcpsockets[group]["connections"][:]:
+            if isMatching(c.cirrina.request):
+                await c.close()
