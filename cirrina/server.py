@@ -704,9 +704,7 @@ class Server(web.Application):
 
         return _wrapper
 
-    async def _wsproxy_handler(self, request, group, prepare: Callable[[web.Request], None]) -> web.Response:
-        self.logger.error("Incoming websocket request")
-
+    async def _wsproxy_handler(self, request, group, prepare: Callable[[web.Request], None]) -> web.StreamResponse:
         session = None
         up = True
         queue = asyncio.Queue()
@@ -717,13 +715,13 @@ class Server(web.Application):
 
             if not self.tcpsockets[group]["authenticated"](request):
                 self.logger.error('tcpproxy: not logged in')
-                return web.Response(status=401)
+                return web.StreamResponse(status=401)
         elif bool(self.tcpsockets[group]["authenticated"]):
             session = await get_session(request)
 
             if session.new:
                 self.logger.error('tcpproxy: not logged in')
-                return web.Response(status=401)
+                return web.StreamResponse(status=401)
 
         if prepare is not None:
             handlers = {e: partial(h, request) for e, h in (await prepare(request)).items()}
