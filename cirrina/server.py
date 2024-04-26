@@ -688,7 +688,10 @@ class Server(web.Application):
 
     # websocket tcp proxy
 
-    def tcp_proxy(self, location, group="main", authenticated: Union[Callable[[web.Request], bool],bool]=True, host="127.0.0.1", port=5900):
+    def tcp_proxy_setup(self, location, group="main", authenticated: Union[Callable[[web.Request], bool],bool]=True, host="127.0.0.1", port=5900):
+        """
+        Decorator for TCP to websocket proxy setup
+        """
         def _wrapper(func):
             async def _wsproxy_wrapper(request) -> web.Response:
                 return await self._wsproxy_handler(request, group, func)
@@ -704,7 +707,7 @@ class Server(web.Application):
 
         return _wrapper
 
-    async def _wsproxy_handler(self, request, group, prepare: Callable[[web.Request], None]) -> web.StreamResponse:
+    async def _wsproxy_handler(self, request, group, setup: Callable[[web.Request], None]) -> web.StreamResponse:
         session = None
         up = True
         queue = asyncio.Queue()
@@ -723,8 +726,8 @@ class Server(web.Application):
                 self.logger.error('tcpproxy: not logged in')
                 return web.StreamResponse(status=401)
 
-        if prepare is not None:
-            handlers = {e: partial(h, request) for e, h in (await prepare(request)).items()}
+        if setup is not None:
+            await setup(request)
 
         ws_client = web.WebSocketResponse(protocols=['binary', 'base64'])
         await ws_client.prepare(request)
@@ -747,17 +750,17 @@ class Server(web.Application):
         asyncio.ensure_future(worker())
 
         class TCPProxyProtocol(asyncio.Protocol):
-            def __init__(self, cirrina, host, port, handlers):
+            def __init__(self, cirrina, host, port, client):
                 self.cirrina = cirrina
                 self.host = host
                 self.port = port
-                self.handlers = handlers
+                self.client = client
 
             def connection_made(self, transport):
                 self.cirrina.logger.info(f"websocket proxy to {self.host}:{self.port} connected")
 
-                if "connect" in self.handlers:
-                    self.handlers["connect"]()
+                for f in self.cirrina.tcpsockets[group].get("connect", []):
+                    f(self.client)
 
 
             def data_received(self, data):
@@ -766,12 +769,12 @@ class Server(web.Application):
             def connection_lost(self, exc):
                 self.cirrina.logger.debug(f"websocket proxy connection to {self.host}:{self.port} closed")
 
-                if "disconnect" in self.handlers:
-                    self.handlers["disconnect"]()
+                for f in self.cirrina.tcpsockets[group].get("disconnect", []):
+                    f(self.client)
 
         host = self.tcpsockets[group]["host"]
         port = self.tcpsockets[group]["port"]
-        transport, protocol = await self.loop.create_connection(lambda: TCPProxyProtocol(self, host, port, handlers), host, port)
+        transport, protocol = await self.loop.create_connection(lambda: TCPProxyProtocol(self, host, port, ws_client), host, port)
 
         while up:
             try:
@@ -802,6 +805,31 @@ class Server(web.Application):
         return ws_client
 
     async def close_tcp_proxy_connections(self, group="main", isMatching = lambda r: True):
-        for c in self.tcpsockets[group]["connections"][:]:
+        connections = self.tcpsockets.get(group, {}).get("connections", [])[:]
+        for c in connections:
             if isMatching(c.cirrina.request):
                 await c.close()
+
+    def tcp_proxy_connect(self, group="main"):
+        """
+        Decorator for TCP to websocket proxy connect events.
+        """
+        if isinstance(group, Callable):
+            raise Exception("Decorator needs paranthesis: tcp_proxy_connect()")
+
+        def _decorator(func):
+            self.tcpsockets.setdefault(group, {}).setdefault("connect", []).append(func)
+
+        return _decorator
+
+    def tcp_proxy_disconnect(self, group="main"):
+        """
+        Decorator for TCP to websocket proxy disconnect events.
+        """
+        if isinstance(group, Callable):
+            raise Exception("Decorator needs paranthesis: tcp_proxy_disconnect()")
+
+        def _decorator(func):
+            self.tcpsockets.setdefault(group, {}).setdefault("disconnect", []).append(func)
+
+        return _decorator
