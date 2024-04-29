@@ -21,7 +21,7 @@ from aiohttp_session_file import FileStorage
 from aiohttp_swagger import setup_swagger
 from collections.abc import Callable
 from cryptography import fernet
-from functools import wraps, partial
+from functools import wraps
 from enum import Enum
 from typing import Union
 
@@ -130,7 +130,6 @@ class Server(web.Application):
                       title=self.title,
                       api_version=self.api_version,
                       contact=self.contact)
-
 
     def set_context_functions(self, create_context_func, destroy_context_func=None):
         self.create_context_func = create_context_func
@@ -439,6 +438,7 @@ class Server(web.Application):
         Register HTTP GET route.
         """
         self.logger.info(f"adding GET {location}")
+
         def _wrapper(func):
             self.router.add_route('GET', location, self._session_wrapper(func, threaded))
             return func
@@ -693,8 +693,8 @@ class Server(web.Application):
         return ws_client
 
     # websocket tcp proxy
-
-    def tcp_proxy_setup(self, location, group="main", authenticated: Union[Callable[[web.Request], bool],bool]=True, host="127.0.0.1", port=5900):
+    def tcp_proxy_setup(self, location, group="main", host="127.0.0.1", port=5900,
+                        authenticated: Union[Callable[[web.Request], bool], bool] = True):
         """
         Decorator for TCP to websocket proxy setup
         """
@@ -717,7 +717,6 @@ class Server(web.Application):
         session = None
         up = True
         queue = asyncio.Queue()
-        handlers = {}
 
         if callable(self.tcpsockets[group]["authenticated"]):
             session = await get_session(request)
@@ -768,7 +767,6 @@ class Server(web.Application):
                 for f in self.cirrina.tcpsockets[group].get("connect", []):
                     f(self.client)
 
-
             def data_received(self, data):
                 self.cirrina.loop.call_soon_threadsafe(queue.put_nowait, (data))
 
@@ -813,7 +811,7 @@ class Server(web.Application):
         self.logger.info(f"websocket proxy to {host}:{port} closed")
         return ws_client
 
-    async def close_tcp_proxy_connections(self, group="main", isMatching = lambda r: True):
+    async def close_tcp_proxy_connections(self, group="main", isMatching=lambda r: True):
         connections = self.tcpsockets.get(group, {}).get("connections", [])[:]
         for c in connections:
             if isMatching(c.cirrina.request):
