@@ -15,6 +15,7 @@ import sys
 import tempfile
 from concurrent import futures
 from aiohttp import web, WSMsgType
+from aiohttp.http_websocket import WSCloseCode
 from aiohttp_session import setup, get_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from aiohttp_session_file import FileStorage
@@ -312,7 +313,7 @@ class Server(web.Application):
                     request.cirrina.web_session['username'] = username
                     response = web.Response(status=200)
                     return response
-        self.logger.warning('User authentication failed for \'%s\'', str(username))
+        self.logger.error('User authentication failed for \'%s\'', str(username))
         await asyncio.sleep(4)
         response = web.Response(status=400)
         request.cirrina.web_session.invalidate()
@@ -641,6 +642,10 @@ class Server(web.Application):
             * messages
         """
         ws_client = web.WebSocketResponse()
+        if not ws_client.can_prepare(request):
+            await ws_client.close(code=WSCloseCode.PROTOCOL_ERROR)
+            self.logger.error("Websocket cannot be prepared")
+            return ws_client
         await ws_client.prepare(request)
 
         session = None
