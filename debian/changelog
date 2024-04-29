@@ -1,8 +1,18 @@
-cirrina (0.5.0~alpha1) stable; urgency=medium
+cirrina (0.5.0) stable; urgency=medium
 
+  * build for molior 1.5
+  * websocket: improve error handling
+  * fix flake8 warnings
+  * Exit receive loop on closing websocket
+  * Use decorator for TCP proxy handlers
+  * Return correct web socket response in error case
+  * Extend tcp proxy
+  * debian: add build order dependency
+  * debian: add dependency
+  * fix startup
   * inherit from Application
 
- -- André Roth <neolynx@gmail.com>  Sun, 26 Nov 2023 14:05:08 +0100
+ -- André Roth <neolynx@gmail.com>  Mon, 29 Apr 2024 22:06:38 +0200
 
 cirrina (0.4.7.11) stable; urgency=medium
 
