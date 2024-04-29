@@ -1,3 +1,28 @@
+cirrina (0.5.0~alpha4) stable; urgency=medium
+
+  * build for molior 1.5
+  * websocket: improve error handling
+  * fix flake8 warnings
+  * Exit receive loop on closing websocket
+  * Use decorator for TCP proxy handlers
+  * Return correct web socket response in error case
+  * Extend tcp proxy
+  * debian: add build order dependency
+  * debian: add dependency
+  * fix startup
+  * cirrina: release 0.5.0~alpha1
+  * inherit from Application
+  * cirrina: release 0.4.7.11
+  * server: websocket proxy cleanup
+  * server: improve closing websocket proxy
+  * cirrina: release 0.4.7.10
+  * server: support websocket tcp proxy
+  * cirrina: release 0.4.7.9
+  * server: invalidate also encrypted cookie sessions
+  * ...
+
+ -- André Roth <neolynx@gmail.com>  Mon, 29 Apr 2024 12:40:36 +0200
+
 cirrina (0.5.0~alpha1) stable; urgency=medium
 
   * inherit from Application
