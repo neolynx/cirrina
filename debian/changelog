@@ -1,3 +1,9 @@
+cirrina (0.5.1) stable; urgency=medium
+
+  * provide setup_swagger()
+
+ -- André Roth <neolynx@gmail.com>  Sat, 18 May 2024 22:07:13 +0200
+
 cirrina (0.5.0) stable; urgency=medium
 
   * build for molior 1.5
