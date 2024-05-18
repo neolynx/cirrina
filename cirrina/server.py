@@ -117,14 +117,14 @@ class Server(web.Application):
         self.access_log_class = web.AccessLogger
 
         # swagger documentation
-        self.title = "Cirrina based web application"
-        self.description = """Cirrina is a web application framework using aiohttp.
-                              See https://github.com/neolynx/cirrina."""
+        self.title = "application"
+        self.description = "Cirrina is a web application"
         self.api_version = "0.1"
-        self.contact = "André Roth <neolynx@gmail.com>"
+        self.contact = "email@info"
 
         self.waiter_event = asyncio.Event()
 
+    def setup_swagger(self):
         # setup API documentation
         setup_swagger(self,
                       description=self.description,
@@ -195,6 +195,8 @@ class Server(web.Application):
 
         # set cirrina logger loglevel
         self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
+
+        self.setup_swagger()
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self._start(address, port))
