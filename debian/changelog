@@ -1,8 +1,9 @@
 cirrina (0.5.0~alpha5) stable; urgency=medium
 
+  * cirrina: release 0.5.0~alpha5
   * fix swagger
 
- -- Dominik Schneider <taylorduzi@gmail.com>  Wed, 29 May 2024 14:14:34 +0000
+ -- Dominik Schneider <taylorduzi@gmail.com>  Wed, 29 May 2024 14:20:05 +0000
 
 cirrina (0.5.0~alpha4) stable; urgency=medium
 
