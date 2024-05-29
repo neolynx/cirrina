@@ -277,7 +277,7 @@ class Server(web.Application):
         tags:
         - Authentication
         consumes:
-        - application/x-www-form-urlencoded
+        - application/json
         parameters:
         - name: username
           in: formData
