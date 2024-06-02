@@ -1,3 +1,9 @@
+cirrina (0.5.2) stable; urgency=medium
+
+  * fix swagger
+
+ -- André Roth <neolynx@gmail.com>  Sun, 02 Jun 2024 22:54:37 +0200
+
 cirrina (0.5.1) stable; urgency=medium
 
   * provide setup_swagger()
