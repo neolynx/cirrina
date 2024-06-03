@@ -785,7 +785,14 @@ class Server(web.Application):
 
         host = self.tcpsockets[group]["host"]
         port = self.tcpsockets[group]["port"]
-        transport, protocol = await self.loop.create_connection(lambda: TCPProxyProtocol(self, host, port, ws_client), host, port)
+
+        try:
+            transport, protocol = await self.loop.create_connection(lambda: TCPProxyProtocol(self, host, port, ws_client), host, port)
+        except ConnectionRefusedError:
+            self.logger.error(f"Failed to open TCP connection to {host}:{port}")
+            await ws_client.close()
+            self.tcpsockets[group]["connections"].remove(ws_client)
+            return ws_client
 
         while up:
             try:
@@ -829,7 +836,7 @@ class Server(web.Application):
         Decorator for TCP to websocket proxy connect events.
         """
         if isinstance(group, Callable):
-            raise Exception("Decorator needs paranthesis: tcp_proxy_connect()")
+            raise Exception("Decorator needs parenthesis: tcp_proxy_connect()")
 
         def _decorator(func):
             self.tcpsockets.setdefault(group, {}).setdefault("connect", []).append(func)
@@ -841,7 +848,7 @@ class Server(web.Application):
         Decorator for TCP to websocket proxy disconnect events.
         """
         if isinstance(group, Callable):
-            raise Exception("Decorator needs paranthesis: tcp_proxy_disconnect()")
+            raise Exception("Decorator needs parenthesis: tcp_proxy_disconnect()")
 
         def _decorator(func):
             self.tcpsockets.setdefault(group, {}).setdefault("disconnect", []).append(func)
