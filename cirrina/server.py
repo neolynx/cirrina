@@ -175,6 +175,7 @@ class Server(web.Application):
                 self.logger.exception(exc)
 
         await self.close_websocket_connections()
+        await self.close_all_tcp_proxy_connections()
         await self.shutdown()
         await self.cleanup()
 
@@ -830,6 +831,10 @@ class Server(web.Application):
         for c in connections:
             if isMatching(c.cirrina.request):
                 await c.close()
+
+    async def close_all_tcp_proxy_connections(self):
+        for group in self.tcpsockets:
+            await self.close_tcp_proxy_connections(group)
 
     def tcp_proxy_connect(self, group="main"):
         """
