@@ -1,3 +1,10 @@
+cirrina (0.5.3) stable; urgency=medium
+
+  * Close all TCP sockets on shutdown
+  * Close websocket if proxy connection fails
+
+ -- André Roth <neolynx@gmail.com>  Tue, 11 Jun 2024 11:00:30 +0200
+
 cirrina (0.5.2) stable; urgency=medium
 
   * fix swagger
